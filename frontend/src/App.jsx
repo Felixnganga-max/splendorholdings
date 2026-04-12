@@ -2,9 +2,12 @@ import React from "react";
 import { Route, Routes, useLocation } from "react-router-dom";
 import Home from "./pages/Home";
 import Navbar from "./components/Navbar";
-// import Footer from "./components/Footer";
+import Footer from "./components/Footer";
 import Dashboard from "./pages/Dashboard";
 import PropertyDetail from "./pages/PropertyCard";
+import Listings from "./pages/Listings";
+import Contact from "./pages/Contact";
+import About from "./pages/About";
 
 function App() {
   const location = useLocation();
@@ -17,8 +20,11 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/property/:id" element={<PropertyDetail />} />
+        <Route path="/listings" element={<Listings />} />
+        <Route path="/contact-us" element={<Contact />} />
+        <Route path="/about-us" element={<About />} />
       </Routes>
-      {/* {!isDashboard && <Footer />} */}
+      {!isDashboard && <Footer />}
     </>
   );
 }

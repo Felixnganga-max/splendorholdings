@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   Heart,
-  Camera,
   Bed,
   Bath,
   Maximize2,
@@ -11,7 +9,6 @@ import {
   ArrowRight,
   Sparkles,
 } from "lucide-react";
-import { properties, tabs } from "../lib/data";
 
 /* ── Font injection ── */
 if (!document.querySelector("#slendor-fonts")) {
@@ -22,6 +19,145 @@ if (!document.querySelector("#slendor-fonts")) {
     "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Jost:wght@300;400;500;600&display=swap";
   document.head.appendChild(l);
 }
+
+/* ── Property data ── */
+const properties = [
+  {
+    id: 1,
+    name: "Amalia Springs",
+    location: "Kiamiti Road, Nairobi",
+    price: "KES 24.5M",
+    beds: 4,
+    baths: 5,
+    area: 350,
+    type: "Villa",
+    badge: "Featured",
+    badgeColor: "#0d6e5e",
+    rating: 4.95,
+    img: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800&q=80",
+  },
+  {
+    id: 2,
+    name: "Palm Court",
+    location: "Ruguima, Kenya",
+    price: "KES 22M",
+    beds: 5,
+    baths: 5,
+    area: 280,
+    type: "Townhouse",
+    badge: "New Listing",
+    badgeColor: "#c2410c",
+    rating: 4.87,
+    img: "https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=800&q=80",
+  },
+  {
+    id: 3,
+    name: "143 Brookview",
+    location: "Ruru, Nairobi",
+    price: "KES 33M",
+    beds: 4,
+    baths: 4,
+    area: 250,
+    type: "Apartment",
+    badge: "New Listing",
+    badgeColor: "#c2410c",
+    rating: 4.92,
+    img: "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=800&q=80",
+  },
+  {
+    id: 4,
+    name: "Grosvenor",
+    location: "Westlands, Nairobi",
+    price: "KES 8.8M",
+    beds: 1,
+    baths: 1,
+    area: 56,
+    type: "Apartment",
+    badge: "Featured",
+    badgeColor: "#0d6e5e",
+    rating: 4.78,
+    img: "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&q=80",
+  },
+  {
+    id: 5,
+    name: "Diamond Ivy",
+    location: "Kileleahwa, Nairobi",
+    price: "KES 6.8M",
+    beds: 1,
+    baths: 2,
+    area: 60,
+    type: "Apartment",
+    badge: "Featured",
+    badgeColor: "#0d6e5e",
+    rating: 4.9,
+    img: "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?w=800&q=80",
+  },
+  {
+    id: 6,
+    name: "Laika Residences",
+    location: "Ruaka, Kiambu",
+    price: "KES 4.7M",
+    beds: 3,
+    baths: 2,
+    area: 60,
+    type: "Maisonette",
+    badge: "For Sale",
+    badgeColor: "#1d4ed8",
+    rating: 4.83,
+    img: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&q=80",
+  },
+  {
+    id: 7,
+    name: "Shangrila Villa",
+    location: "Ongata Rongai, Kajiado",
+    price: "KES 20M",
+    beds: 4,
+    baths: 5,
+    area: 200,
+    type: "Villa",
+    badge: "Featured",
+    badgeColor: "#0d6e5e",
+    rating: 4.96,
+    img: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&q=80",
+  },
+  {
+    id: 8,
+    name: "Forest Hill",
+    location: "Ngong, Kajiado",
+    price: "KES 15M",
+    beds: 4,
+    baths: 4,
+    area: 210,
+    type: "Townhouse",
+    badge: "Featured",
+    badgeColor: "#0d6e5e",
+    rating: 4.88,
+    img: "https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=800&q=80",
+  },
+  {
+    id: 9,
+    name: "Serene Park",
+    location: "Machakos, Kenya",
+    price: "KES 22.4M",
+    beds: 0,
+    baths: 4,
+    area: 280,
+    type: "Land/Plot",
+    badge: "For Sale",
+    badgeColor: "#1d4ed8",
+    rating: 4.72,
+    img: "https://images.unsplash.com/photo-1448630360428-65456885c650?w=800&q=80",
+  },
+];
+
+const tabs = [
+  "View All",
+  "Apartments",
+  "Land/Plot",
+  "Maisonettes",
+  "Townhouse",
+  "Villa",
+];
 
 /* ── Parallax hook ── */
 function useParallax(ref, speed = 0.08) {
@@ -42,23 +178,13 @@ function useParallax(ref, speed = 0.08) {
 
 /* ── Single Card ── */
 function PropertyCard({ p, index }) {
-  const navigate = useNavigate();
   const [liked, setLiked] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const imgRef = useRef(null);
   const parallaxY = useParallax(imgRef, 0.06);
 
-  // Use first image from imgs array
-  const coverImg = p.imgs?.[0] ?? "";
-  const photoCount = p.imgs?.length ?? 0;
-
-  const handleView = () => {
-    navigate(`/property/${p.id}`, { state: { property: p } });
-  };
-
   return (
     <div
-      onClick={handleView}
       style={{
         background: "#fff",
         borderRadius: 20,
@@ -90,7 +216,7 @@ function PropertyCard({ p, index }) {
         }}
       >
         <img
-          src={coverImg}
+          src={p.img}
           alt={p.name}
           onLoad={() => setImgLoaded(true)}
           style={{
@@ -157,7 +283,7 @@ function PropertyCard({ p, index }) {
           </span>
         </div>
 
-        {/* Like + photo count */}
+        {/* Like + camera */}
         <div
           style={{
             position: "absolute",
@@ -197,36 +323,6 @@ function PropertyCard({ p, index }) {
               strokeWidth={2}
             />
           </button>
-
-          {/* Photo count pill */}
-          {photoCount > 1 && (
-            <div
-              style={{
-                height: 34,
-                borderRadius: 99,
-                background: "rgba(255,255,255,0.2)",
-                backdropFilter: "blur(8px)",
-                border: "1px solid rgba(255,255,255,0.35)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 5,
-                padding: "0 10px",
-              }}
-            >
-              <Camera size={12} color="white" strokeWidth={2} />
-              <span
-                style={{
-                  color: "#fff",
-                  fontSize: 11,
-                  fontFamily: "'Jost', sans-serif",
-                  fontWeight: 500,
-                }}
-              >
-                {photoCount}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* Rating bottom-left */}
@@ -315,20 +411,18 @@ function PropertyCard({ p, index }) {
               </span>
             </div>
           )}
-          {p.baths > 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <Bath size={13} color="#c2884a" strokeWidth={1.8} />
-              <span
-                style={{
-                  fontSize: 12,
-                  color: "#6b5c4a",
-                  fontFamily: "'Jost', sans-serif",
-                }}
-              >
-                {p.baths} Baths
-              </span>
-            </div>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <Bath size={13} color="#c2884a" strokeWidth={1.8} />
+            <span
+              style={{
+                fontSize: 12,
+                color: "#6b5c4a",
+                fontFamily: "'Jost', sans-serif",
+              }}
+            >
+              {p.baths} Baths
+            </span>
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <Maximize2 size={12} color="#c2884a" strokeWidth={1.8} />
             <span
@@ -377,10 +471,6 @@ function PropertyCard({ p, index }) {
             </div>
           </div>
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleView();
-            }}
             style={{
               display: "flex",
               alignItems: "center",
@@ -481,9 +571,9 @@ export default function FeaturedProperties() {
 
       <div
         style={{
-          maxWidth: 1200,
+          maxWidth: 1440,
           margin: "0 auto",
-          padding: "0 clamp(1.5rem, 5vw, 4rem)",
+          padding: "0 clamp(1rem, 3vw, 2.5rem)",
         }}
       >
         {/* ── Section header ── */}
