@@ -24,11 +24,10 @@ if (!document.querySelector("#slendor-fonts")) {
 
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "properties", label: "Properties", icon: Layers },
+  { id: "add-property", label: "Add Property", icon: PlusSquare },
   { id: "orders", label: "Orders", icon: ShoppingBag, badge: 4 },
   { id: "inquiries", label: "Inquiries", icon: Bell, badge: 11 },
-  { id: "add-property", label: "Add Property", icon: PlusSquare },
-  { id: "placeholder1", label: "Analytics Pro", icon: Layers },
-  { id: "placeholder2", label: "AI Assistant", icon: Cpu },
 ];
 
 const bottomItems = [

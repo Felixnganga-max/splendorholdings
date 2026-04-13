@@ -487,7 +487,7 @@ export default function Navbar() {
               ))}
               {/* CTA button */}
               <a
-                href="/listings"
+                href="/authentication"
                 style={{
                   fontFamily: "'Jost', sans-serif",
                   fontSize: 11,
@@ -512,7 +512,7 @@ export default function Navbar() {
                   e.currentTarget.style.transform = "scale(1)";
                 }}
               >
-                View Listings
+                Account
               </a>
             </nav>
 

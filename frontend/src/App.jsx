@@ -8,6 +8,7 @@ import PropertyDetail from "./pages/PropertyCard";
 import Listings from "./pages/Listings";
 import Contact from "./pages/Contact";
 import About from "./pages/About";
+import Auth from "./pages/Auth";
 
 function App() {
   const location = useLocation();
@@ -23,6 +24,7 @@ function App() {
         <Route path="/listings" element={<Listings />} />
         <Route path="/contact-us" element={<Contact />} />
         <Route path="/about-us" element={<About />} />
+        <Route path="/authentication" element={<Auth />} />
       </Routes>
       {!isDashboard && <Footer />}
     </>

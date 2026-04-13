@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef } from "react";
 import {
   Upload,
   MapPin,
@@ -7,13 +7,17 @@ import {
   Bed,
   Bath,
   Maximize2,
-  Tag,
   CheckCircle,
   Plus,
   X,
+  Image as ImageIcon,
+  Loader2,
+  AlertCircle,
+  Tag,
 } from "lucide-react";
+import { useAddProperty } from "../Hooks/useAddProperty";
 
-const propertyTypes = [
+const PROPERTY_TYPES = [
   "Villa",
   "Apartment",
   "Townhouse",
@@ -21,8 +25,9 @@ const propertyTypes = [
   "Land/Plot",
   "Commercial",
 ];
-const badges = ["Featured", "New Listing", "For Sale", "For Rent", "Off-Plan"];
+const BADGES = ["Featured", "New Listing", "For Sale", "For Rent", "Off-Plan"];
 
+// ── Reusable primitives ──────────────────────────────────────────────────────
 const Field = ({ label, children, hint }) => (
   <div>
     <label
@@ -55,6 +60,20 @@ const Field = ({ label, children, hint }) => (
   </div>
 );
 
+const inputBase = {
+  width: "100%",
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: "1.5px solid #f0e6d8",
+  background: "#fdf8f3",
+  fontFamily: "'Jost', sans-serif",
+  fontSize: 13,
+  color: "#1a0f00",
+  outline: "none",
+  boxSizing: "border-box",
+  transition: "border 0.2s",
+};
+
 const Input = ({ icon: Icon, ...props }) => (
   <div style={{ position: "relative" }}>
     {Icon && (
@@ -66,23 +85,15 @@ const Input = ({ icon: Icon, ...props }) => (
           left: 14,
           top: "50%",
           transform: "translateY(-50%)",
+          pointerEvents: "none",
         }}
       />
     )}
     <input
       {...props}
       style={{
-        width: "100%",
-        padding: Icon ? "12px 14px 12px 38px" : "12px 14px",
-        borderRadius: 12,
-        border: "1.5px solid #f0e6d8",
-        background: "#fdf8f3",
-        fontFamily: "'Jost', sans-serif",
-        fontSize: 13,
-        color: "#1a0f00",
-        outline: "none",
-        boxSizing: "border-box",
-        transition: "border 0.2s",
+        ...inputBase,
+        ...(Icon ? { paddingLeft: 38 } : {}),
         ...props.style,
       }}
       onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
@@ -91,51 +102,51 @@ const Input = ({ icon: Icon, ...props }) => (
   </div>
 );
 
+const card = {
+  background: "#fff",
+  borderRadius: 20,
+  border: "1.5px solid #f0e6d8",
+  padding: "24px",
+};
+
+// ── Main component ───────────────────────────────────────────────────────────
 export default function AddPropertyPage() {
-  const [form, setForm] = useState({
-    name: "",
-    location: "",
-    price: "",
-    beds: "",
-    baths: "",
-    area: "",
-    type: "",
-    badge: "",
-    rating: "",
-    description: "",
-    features: [],
-  });
-  const [submitted, setSubmitted] = useState(false);
-  const [featureInput, setFeatureInput] = useState("");
-  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef(null);
 
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const {
+    form,
+    set,
+    setField,
+    imageFiles,
+    addImages,
+    removeImage,
+    featureInput,
+    setFeatureInput,
+    addFeature,
+    removeFeature,
+    loading,
+    error,
+    success,
+    submit,
+  } = useAddProperty();
 
-  const addFeature = () => {
-    if (featureInput.trim()) {
-      setForm((f) => ({
-        ...f,
-        features: [...f.features, featureInput.trim()],
-      }));
-      setFeatureInput("");
-    }
+  const handleDrop = (e) => {
+    e.preventDefault();
+    addImages(e.dataTransfer.files);
   };
 
-  const removeFeature = (i) => {
-    setForm((f) => ({
-      ...f,
-      features: f.features.filter((_, idx) => idx !== i),
-    }));
+  const handleFileInput = (e) => {
+    addImages(e.target.files);
+    e.target.value = ""; // allow re-selecting same files
   };
 
-  const handleSubmit = () => {
-    if (!form.name || !form.location || !form.price) return;
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 3500);
+  const handleSubmit = async () => {
+    await submit();
   };
 
   return (
-    <div style={{ padding: "36px 40px", maxWidth: 900, margin: "0 auto" }}>
+    <div style={{ padding: "36px 40px", maxWidth: 960, margin: "0 auto" }}>
+      {/* ── Header ── */}
       <div style={{ marginBottom: 36 }}>
         <p
           style={{
@@ -162,7 +173,8 @@ export default function AddPropertyPage() {
         </h1>
       </div>
 
-      {submitted && (
+      {/* ── Success banner ── */}
+      {success && (
         <div
           style={{
             display: "flex",
@@ -176,7 +188,7 @@ export default function AddPropertyPage() {
             animation: "slideUp 0.3s ease",
           }}
         >
-          <style>{`@keyframes slideUp { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+          <style>{`@keyframes slideUp { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }`}</style>
           <CheckCircle size={18} color="#0d6e5e" />
           <span
             style={{
@@ -191,45 +203,72 @@ export default function AddPropertyPage() {
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28 }}>
-        {/* Left column */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-          {/* Image upload */}
-          <div
+      {/* ── Error banner ── */}
+      {error && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            background: "#fef2f2",
+            border: "1.5px solid #fca5a5",
+            borderRadius: 14,
+            padding: "16px 20px",
+            marginBottom: 28,
+            animation: "slideUp 0.3s ease",
+          }}
+        >
+          <AlertCircle size={18} color="#dc2626" />
+          <span
             style={{
-              background: "#fff",
-              borderRadius: 20,
-              border: "1.5px solid #f0e6d8",
-              padding: "24px",
+              fontFamily: "'Jost', sans-serif",
+              fontSize: 13,
+              color: "#dc2626",
+              fontWeight: 500,
             }}
           >
-            <Field label="Property Images">
+            {error}
+          </span>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28 }}>
+        {/* ════════════════ LEFT COLUMN ════════════════ */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+          {/* Image upload */}
+          <div style={card}>
+            <Field
+              label="Property Images"
+              hint="First image will be the primary/cover image. Max 10 files, 5 MB each."
+            >
+              {/* Drop zone */}
               <div
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOver(true);
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragOver(false);
-                }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
                 style={{
-                  border: `2px dashed ${dragOver ? "#7B2D8B" : "#e8ddd2"}`,
+                  border: "2px dashed #e8ddd2",
                   borderRadius: 14,
-                  padding: "36px 20px",
+                  padding: "32px 20px",
                   textAlign: "center",
-                  background: dragOver ? "#f3e8ff20" : "#fdf8f3",
+                  background: "#fdf8f3",
                   cursor: "pointer",
                   transition: "all 0.2s",
+                  marginBottom: 16,
                 }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.borderColor = "#c2884a")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.borderColor = "#e8ddd2")
+                }
               >
                 <div
                   style={{
                     width: 44,
                     height: 44,
                     borderRadius: 12,
-                    background: "linear-gradient(135deg, #7B2D8B18, #4A106008)",
+                    background: "linear-gradient(135deg,#7B2D8B18,#4A106008)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -247,13 +286,7 @@ export default function AddPropertyPage() {
                   }}
                 >
                   Drag photos here or{" "}
-                  <span
-                    style={{
-                      color: "#7B2D8B",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
+                  <span style={{ color: "#7B2D8B", fontWeight: 600 }}>
                     browse
                   </span>
                 </p>
@@ -264,21 +297,120 @@ export default function AddPropertyPage() {
                     color: "#c8b09a",
                   }}
                 >
-                  PNG, JPG up to 10MB each
+                  PNG, JPG, WEBP · up to 5 MB each · max 10 images
                 </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={handleFileInput}
+                />
               </div>
+
+              {/* Preview grid */}
+              {imageFiles.length > 0 && (
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))",
+                    gap: 8,
+                  }}
+                >
+                  {imageFiles.map(({ preview }, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        position: "relative",
+                        borderRadius: 10,
+                        overflow: "hidden",
+                        aspectRatio: "1",
+                        border:
+                          idx === 0
+                            ? "2px solid #7B2D8B"
+                            : "2px solid transparent",
+                      }}
+                    >
+                      <img
+                        src={preview}
+                        alt=""
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                        }}
+                      />
+                      {/* Primary badge */}
+                      {idx === 0 && (
+                        <span
+                          style={{
+                            position: "absolute",
+                            bottom: 4,
+                            left: 4,
+                            background: "#7B2D8B",
+                            color: "#fff",
+                            fontSize: 9,
+                            fontWeight: 600,
+                            fontFamily: "'Jost', sans-serif",
+                            padding: "2px 6px",
+                            borderRadius: 99,
+                            letterSpacing: "0.05em",
+                          }}
+                        >
+                          PRIMARY
+                        </span>
+                      )}
+                      {/* Remove button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeImage(idx);
+                        }}
+                        style={{
+                          position: "absolute",
+                          top: 4,
+                          right: 4,
+                          width: 20,
+                          height: 20,
+                          borderRadius: "50%",
+                          background: "rgba(0,0,0,0.6)",
+                          border: "none",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <X size={10} color="#fff" />
+                      </button>
+                    </div>
+                  ))}
+                  {/* Add more tile */}
+                  {imageFiles.length < 10 && (
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      style={{
+                        aspectRatio: "1",
+                        borderRadius: 10,
+                        border: "2px dashed #e8ddd2",
+                        background: "#fdf8f3",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Plus size={16} color="#c8b09a" />
+                    </div>
+                  )}
+                </div>
+              )}
             </Field>
           </div>
 
-          {/* Details */}
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 20,
-              border: "1.5px solid #f0e6d8",
-              padding: "24px",
-            }}
-          >
+          {/* Property details */}
+          <div style={card}>
             <h3
               style={{
                 fontFamily: "'Cormorant Garamond', serif",
@@ -291,7 +423,7 @@ export default function AddPropertyPage() {
               Property Details
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              <Field label="Property Name">
+              <Field label="Property Name *">
                 <Input
                   icon={Home}
                   value={form.name}
@@ -299,7 +431,7 @@ export default function AddPropertyPage() {
                   placeholder="e.g. Amalia Springs"
                 />
               </Field>
-              <Field label="Location">
+              <Field label="Location *">
                 <Input
                   icon={MapPin}
                   value={form.location}
@@ -307,14 +439,31 @@ export default function AddPropertyPage() {
                   placeholder="e.g. Kiamiti Road, Nairobi"
                 />
               </Field>
-              <Field label="Listed Price">
-                <Input
-                  icon={DollarSign}
-                  value={form.price}
-                  onChange={set("price")}
-                  placeholder="e.g. KES 24.5M"
-                />
-              </Field>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                }}
+              >
+                <Field label="Price (KES) *">
+                  <Input
+                    icon={DollarSign}
+                    value={form.price}
+                    onChange={set("price")}
+                    placeholder="24500000"
+                    type="number"
+                  />
+                </Field>
+                <Field label="Price Label" hint="e.g. Per month">
+                  <Input
+                    icon={Tag}
+                    value={form.priceLabel}
+                    onChange={set("priceLabel")}
+                    placeholder="Per month"
+                  />
+                </Field>
+              </div>
               <div
                 style={{
                   display: "grid",
@@ -354,17 +503,10 @@ export default function AddPropertyPage() {
           </div>
         </div>
 
-        {/* Right column */}
+        {/* ════════════════ RIGHT COLUMN ════════════════ */}
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
           {/* Classification */}
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 20,
-              border: "1.5px solid #f0e6d8",
-              padding: "24px",
-            }}
-          >
+          <div style={card}>
             <h3
               style={{
                 fontFamily: "'Cormorant Garamond', serif",
@@ -377,12 +519,12 @@ export default function AddPropertyPage() {
               Classification
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              <Field label="Property Type">
+              <Field label="Property Type *">
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {propertyTypes.map((t) => (
+                  {PROPERTY_TYPES.map((t) => (
                     <button
                       key={t}
-                      onClick={() => setForm((f) => ({ ...f, type: t }))}
+                      onClick={() => setField("type", t)}
                       style={{
                         fontFamily: "'Jost', sans-serif",
                         fontSize: 12,
@@ -393,7 +535,7 @@ export default function AddPropertyPage() {
                           form.type === t ? "none" : "1.5px solid #e8ddd2",
                         background:
                           form.type === t
-                            ? "linear-gradient(135deg, #7B2D8B, #4A1060)"
+                            ? "linear-gradient(135deg,#7B2D8B,#4A1060)"
                             : "#fdf8f3",
                         color: form.type === t ? "#fff" : "#7a6555",
                         cursor: "pointer",
@@ -405,13 +547,14 @@ export default function AddPropertyPage() {
                   ))}
                 </div>
               </Field>
-
               <Field label="Badge">
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {badges.map((b) => (
+                  {BADGES.map((b) => (
                     <button
                       key={b}
-                      onClick={() => setForm((f) => ({ ...f, badge: b }))}
+                      onClick={() =>
+                        setField("badge", form.badge === b ? "" : b)
+                      }
                       style={{
                         fontFamily: "'Jost', sans-serif",
                         fontSize: 12,
@@ -434,15 +577,8 @@ export default function AddPropertyPage() {
             </div>
           </div>
 
-          {/* Description */}
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: 20,
-              border: "1.5px solid #f0e6d8",
-              padding: "24px",
-            }}
-          >
+          {/* Description & Features */}
+          <div style={card}>
             <h3
               style={{
                 fontFamily: "'Cormorant Garamond', serif",
@@ -459,47 +595,29 @@ export default function AddPropertyPage() {
                 <textarea
                   value={form.description}
                   onChange={set("description")}
-                  rows={4}
+                  rows={5}
                   placeholder="Describe the property, neighbourhood, key selling points…"
                   style={{
-                    width: "100%",
-                    padding: "12px 14px",
-                    borderRadius: 12,
-                    border: "1.5px solid #f0e6d8",
-                    background: "#fdf8f3",
-                    fontFamily: "'Jost', sans-serif",
-                    fontSize: 13,
-                    color: "#1a0f00",
-                    outline: "none",
-                    boxSizing: "border-box",
+                    ...inputBase,
                     resize: "vertical",
                     lineHeight: 1.7,
-                    transition: "border 0.2s",
+                    padding: "12px 14px",
                   }}
                   onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
                   onBlur={(e) => (e.target.style.borderColor = "#f0e6d8")}
                 />
               </Field>
 
-              <Field label="Key Features">
+              <Field label="Key Features" hint="Press Enter or click + to add">
                 <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                   <input
                     value={featureInput}
                     onChange={(e) => setFeatureInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addFeature()}
+                    onKeyDown={(e) =>
+                      e.key === "Enter" && (e.preventDefault(), addFeature())
+                    }
                     placeholder="e.g. Swimming pool, BQ, Solar…"
-                    style={{
-                      flex: 1,
-                      padding: "10px 14px",
-                      borderRadius: 10,
-                      border: "1.5px solid #f0e6d8",
-                      background: "#fdf8f3",
-                      fontFamily: "'Jost', sans-serif",
-                      fontSize: 12,
-                      color: "#1a0f00",
-                      outline: "none",
-                      transition: "border 0.2s",
-                    }}
+                    style={{ ...inputBase, fontSize: 12, padding: "10px 14px" }}
                     onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
                     onBlur={(e) => (e.target.style.borderColor = "#f0e6d8")}
                   />
@@ -510,13 +628,13 @@ export default function AddPropertyPage() {
                       height: 38,
                       borderRadius: 10,
                       border: "none",
-                      background: "linear-gradient(135deg, #7B2D8B, #4A1060)",
+                      background: "linear-gradient(135deg,#7B2D8B,#4A1060)",
                       color: "#fff",
                       cursor: "pointer",
+                      flexShrink: 0,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      flexShrink: 0,
                     }}
                   >
                     <Plus size={15} />
@@ -548,6 +666,7 @@ export default function AddPropertyPage() {
                           cursor: "pointer",
                           padding: 0,
                           display: "flex",
+                          alignItems: "center",
                         }}
                       >
                         <X size={10} color="#7B2D8B" />
@@ -562,32 +681,52 @@ export default function AddPropertyPage() {
           {/* Submit */}
           <button
             onClick={handleSubmit}
+            disabled={loading}
             style={{
               width: "100%",
               padding: "16px",
               borderRadius: 14,
               border: "none",
-              background: "linear-gradient(135deg, #7B2D8B, #4A1060)",
+              background: loading
+                ? "#9ca3af"
+                : "linear-gradient(135deg,#7B2D8B,#4A1060)",
               color: "#fff",
               fontFamily: "'Jost', sans-serif",
               fontSize: 14,
               fontWeight: 600,
               letterSpacing: "0.08em",
               textTransform: "uppercase",
-              cursor: "pointer",
+              cursor: loading ? "not-allowed" : "pointer",
               transition: "filter 0.2s, transform 0.2s",
-              boxShadow: "0 8px 28px rgba(123,45,139,0.3)",
+              boxShadow: loading ? "none" : "0 8px 28px rgba(123,45,139,0.3)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.filter = "brightness(1.1)";
-              e.currentTarget.style.transform = "translateY(-2px)";
+              if (!loading) {
+                e.currentTarget.style.filter = "brightness(1.1)";
+                e.currentTarget.style.transform = "translateY(-2px)";
+              }
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.filter = "brightness(1)";
               e.currentTarget.style.transform = "translateY(0)";
             }}
           >
-            List Property
+            {loading ? (
+              <>
+                <Loader2
+                  size={16}
+                  style={{ animation: "spin 0.8s linear infinite" }}
+                />
+                Uploading & Saving…
+              </>
+            ) : (
+              "List Property"
+            )}
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </button>
         </div>
       </div>

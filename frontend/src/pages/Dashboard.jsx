@@ -5,6 +5,7 @@ import OrdersPage from "../components/OrdersPage";
 import InquiriesPage from "../components/InquiriesPage";
 import AddPropertyPage from "../components/AddPropertyPage";
 import AnalyticsPage from "../components/AnalyticsPage";
+import Properties from "../components/Properties";
 
 import ProfilePage from "../components/ProfilePage";
 import SettingsPage from "../components/SettingsPage";
@@ -23,7 +24,7 @@ const pageMap = {
   orders: OrdersPage,
   inquiries: InquiriesPage,
   "add-property": AddPropertyPage,
-  placeholder1: AnalyticsPage,
+  properties: Properties,
 
   profile: ProfilePage,
   settings: SettingsPage,
