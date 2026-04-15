@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from "react";
-import { MapPin, Mail, Phone, Menu, X, ChevronDown } from "lucide-react";
+import { useState, useEffect } from "react";
+import { MapPin, Mail, Phone, Menu, X } from "lucide-react";
+import assets from "../assets/assets";
 
 if (!document.querySelector("#splendor-nav-fonts")) {
   const l = document.createElement("link");
@@ -15,109 +16,21 @@ const NAVY = "#1A3A5C";
 const GOLD = "#D4AF37";
 const CREAM = "#EDE8DC";
 const OFFWHITE = "#FAFAF8";
-const DARK = "#0D0D0D";
 
 const navLinks = [
   { label: "Properties", href: "/listings" },
-  { label: "Buy & Sell", href: "#" },
-  { label: "Rentals", href: "#" },
-  {
-    label: "Services",
-    href: "#",
-    children: [
-      { label: "Property Management", href: "#" },
-      { label: "Investment Advisory", href: "#" },
-      { label: "Valuations", href: "#" },
-    ],
-  },
+  { label: "Looking for Land?", href: "/land" },
+  { label: "Projects", href: "/projects" },
+  { label: "Services", href: "/services" },
   { label: "About", href: "/about-us" },
   { label: "Contact", href: "/contact-us" },
 ];
 
-function Dropdown({ items, visible }) {
-  return (
-    <div
-      style={{
-        position: "absolute",
-        top: "calc(100% + 14px)",
-        left: "50%",
-        transform: visible
-          ? "translateX(-50%) translateY(0)"
-          : "translateX(-50%) translateY(-10px)",
-        background: OFFWHITE,
-        borderRadius: 12,
-        boxShadow: "0 20px 60px rgba(10,17,114,0.14)",
-        border: `1px solid ${CREAM}`,
-        minWidth: 210,
-        overflow: "hidden",
-        opacity: visible ? 1 : 0,
-        pointerEvents: visible ? "auto" : "none",
-        transition:
-          "opacity 0.22s ease, transform 0.22s cubic-bezier(0.22,1,0.36,1)",
-        zIndex: 100,
-      }}
-    >
-      <div
-        style={{
-          height: 3,
-          background: `linear-gradient(90deg,${ROYAL},${GOLD})`,
-        }}
-      />
-      {items.map((item, i) => (
-        <a
-          key={i}
-          href={item.href}
-          style={{
-            display: "block",
-            padding: "11px 20px",
-            fontFamily: "'Lato', sans-serif",
-            fontSize: 12.5,
-            fontWeight: 400,
-            color: NAVY,
-            textDecoration: "none",
-            borderBottom: i < items.length - 1 ? `1px solid ${CREAM}` : "none",
-            transition: "background 0.18s, color 0.18s, padding-left 0.18s",
-            letterSpacing: "0.03em",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = CREAM;
-            e.currentTarget.style.color = ROYAL;
-            e.currentTarget.style.paddingLeft = "28px";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.color = NAVY;
-            e.currentTarget.style.paddingLeft = "20px";
-          }}
-        >
-          {item.label}
-        </a>
-      ))}
-    </div>
-  );
-}
-
 function NavItem({ link, scrolled }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const fn = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", fn);
-    return () => document.removeEventListener("mousedown", fn);
-  }, []);
-
-  const textColor = scrolled ? NAVY : ROYAL;
+  const textColor = scrolled ? "rgba(237,232,220,0.85)" : "#FFFFFF";
 
   return (
-    <div
-      ref={ref}
-      style={{ position: "relative" }}
-      onMouseEnter={() => link.children && setOpen(true)}
-      onMouseLeave={() => link.children && setOpen(false)}
-    >
+    <div style={{ position: "relative" }}>
       <a
         href={link.href}
         style={{
@@ -125,14 +38,12 @@ function NavItem({ link, scrolled }) {
           alignItems: "center",
           gap: 4,
           fontFamily: "'Lato', sans-serif",
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: "0.11em",
-          textTransform: "uppercase",
+          fontSize: 12,
+          fontWeight: 400,
+          letterSpacing: "0.04em",
           color: textColor,
           textDecoration: "none",
-          padding: "6px 2px",
-          position: "relative",
+          padding: "4px 2px",
           transition: "color 0.2s",
           whiteSpace: "nowrap",
         }}
@@ -140,33 +51,7 @@ function NavItem({ link, scrolled }) {
         onMouseLeave={(e) => (e.currentTarget.style.color = textColor)}
       >
         {link.label}
-        {link.children && (
-          <ChevronDown
-            size={11}
-            strokeWidth={2.5}
-            style={{
-              transform: open ? "rotate(180deg)" : "rotate(0deg)",
-              transition: "transform 0.25s ease",
-              color: GOLD,
-            }}
-          />
-        )}
-        <span
-          style={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: 1.5,
-            borderRadius: 2,
-            background: GOLD,
-            transform: open ? "scaleX(1)" : "scaleX(0)",
-            transformOrigin: "left",
-            transition: "transform 0.25s ease",
-          }}
-        />
       </a>
-      {link.children && <Dropdown items={link.children} visible={open} />}
     </div>
   );
 }
@@ -174,7 +59,6 @@ function NavItem({ link, scrolled }) {
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [openMobile, setOpenMobile] = useState(null);
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 20);
@@ -189,6 +73,9 @@ export default function Navbar() {
       document.body.style.overflow = "";
     };
   }, [menuOpen]);
+
+  // Always royal blue — slightly deeper shade when scrolled for depth
+  const navBg = scrolled ? "#0C1580" : ROYAL;
 
   return (
     <>
@@ -214,7 +101,7 @@ export default function Navbar() {
         <div
           style={{
             background: ROYAL,
-            padding: "7px clamp(1rem,4vw,3rem)",
+            padding: "6px clamp(1rem,4vw,3rem)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -232,16 +119,16 @@ export default function Navbar() {
             }}
           >
             {[
-              { Icon: MapPin, text: "14 Riverside Drive, Westlands, Nairobi" },
+              { Icon: MapPin, text: "Senteu Plaza, Kilimani, Nairobi" },
               {
                 Icon: Mail,
-                text: "info@splendorholdings.com",
-                href: "mailto:info@splendorholdings.com",
+                text: "sally@splendorholdings.com",
+                href: "mailto:sally@splendorholdings.com",
               },
               {
                 Icon: Phone,
-                text: "+254 700 123 456",
-                href: "tel:+254700123456",
+                text: "+254 725 504 985",
+                href: "tel:+254725504985",
               },
             ].map(({ Icon, text, href }, i) =>
               href ? (
@@ -254,7 +141,7 @@ export default function Navbar() {
                     alignItems: "center",
                     gap: 7,
                     fontFamily: "'Lato', sans-serif",
-                    fontSize: 11.5,
+                    fontSize: 11,
                     color: "rgba(237,232,220,0.80)",
                     textDecoration: "none",
                     fontWeight: 300,
@@ -262,7 +149,7 @@ export default function Navbar() {
                     transition: "color 0.2s",
                   }}
                 >
-                  <Icon size={12} strokeWidth={1.8} color={GOLD} />
+                  <Icon size={11} strokeWidth={1.8} color={GOLD} />
                   <span className="topbar-text">{text}</span>
                 </a>
               ) : (
@@ -272,21 +159,20 @@ export default function Navbar() {
                     display: "flex",
                     alignItems: "center",
                     gap: 7,
-                    fontSize: 11.5,
+                    fontSize: 11,
                     fontFamily: "'Lato', sans-serif",
                     color: "rgba(237,232,220,0.80)",
                     fontWeight: 300,
                     letterSpacing: "0.03em",
                   }}
                 >
-                  <Icon size={12} strokeWidth={1.8} color={GOLD} />
+                  <Icon size={11} strokeWidth={1.8} color={GOLD} />
                   <span className="topbar-text">{text}</span>
                 </span>
               ),
             )}
           </div>
 
-          {/* Open badge */}
           <div
             style={{
               display: "flex",
@@ -310,7 +196,7 @@ export default function Navbar() {
             <span
               style={{
                 fontFamily: "'Lato'",
-                fontSize: 10.5,
+                fontSize: 10,
                 color: "rgba(237,232,220,0.80)",
                 letterSpacing: "0.08em",
               }}
@@ -323,12 +209,9 @@ export default function Navbar() {
         {/* ── MAIN NAV BAR ── */}
         <div
           style={{
-            background: scrolled ? `rgba(250,250,248,0.97)` : OFFWHITE,
-            backdropFilter: scrolled ? "blur(12px)" : "none",
-            borderBottom: `1px solid ${CREAM}`,
-            boxShadow: scrolled
-              ? `0 4px 32px rgba(10,17,114,0.08)`
-              : `0 1px 0 rgba(10,17,114,0.04)`,
+            background: navBg,
+            borderBottom: `1px solid rgba(212,175,55,0.15)`,
+            boxShadow: scrolled ? `0 4px 24px rgba(10,17,114,0.35)` : "none",
             transition: "all 0.35s ease",
           }}
         >
@@ -340,7 +223,7 @@ export default function Navbar() {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              height: 72,
+              height: 60,
             }}
           >
             {/* LEFT NAV */}
@@ -349,7 +232,7 @@ export default function Navbar() {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: "clamp(16px,2.5vw,36px)",
+                gap: "clamp(16px,2vw,30px)",
               }}
             >
               {navLinks.slice(0, 3).map((link, i) => (
@@ -364,97 +247,28 @@ export default function Navbar() {
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
+                justifyContent: "center",
                 textDecoration: "none",
                 flexShrink: 0,
                 userSelect: "none",
                 padding: "0 clamp(8px,2vw,32px)",
+                background: ROYAL,
+                height: 60,
+                minWidth: 300,
+                borderLeft: `1px solid rgba(212,175,55,0.15)`,
+                borderRight: `1px solid rgba(212,175,55,0.15)`,
               }}
             >
-              {/* Royal crown SVG mark */}
-              <svg
-                width="38"
-                height="36"
-                viewBox="0 0 48 44"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                style={{ marginBottom: 5 }}
-              >
-                {/* Base building */}
-                <rect x="19" y="12" width="10" height="30" fill={ROYAL} />
-                <rect
-                  x="9"
-                  y="20"
-                  width="10"
-                  height="22"
-                  fill={ROYAL}
-                  opacity="0.65"
-                />
-                <rect
-                  x="29"
-                  y="20"
-                  width="10"
-                  height="22"
-                  fill={ROYAL}
-                  opacity="0.65"
-                />
-                <rect
-                  x="2"
-                  y="28"
-                  width="7"
-                  height="14"
-                  fill={ROYAL}
-                  opacity="0.30"
-                />
-                <rect
-                  x="39"
-                  y="28"
-                  width="7"
-                  height="14"
-                  fill={ROYAL}
-                  opacity="0.30"
-                />
-                {/* Gold spire */}
-                <rect x="23" y="0" width="2" height="14" fill={GOLD} />
-                <polygon points="24,0 21,8 27,8" fill={GOLD} />
-                {/* Gold accent band */}
-                <rect
-                  x="19"
-                  y="12"
-                  width="10"
-                  height="2.5"
-                  fill={GOLD}
-                  opacity="0.6"
-                />
-              </svg>
-
-              <span
+              <img
+                src={assets.logo}
+                alt="Splendor Holdings"
                 style={{
-                  fontFamily: "'Playfair Display', serif",
-                  fontSize: "clamp(13px,1.4vw,15px)",
-                  fontWeight: 700,
-                  letterSpacing: "0.20em",
-                  textTransform: "uppercase",
-                  color: ROYAL,
-                  lineHeight: 1,
-                  whiteSpace: "nowrap",
+                  height: 80,
+                  width: 200,
+                  objectFit: "contain",
+                  marginBottom: 4,
                 }}
-              >
-                Splendor Holdings
-              </span>
-              <span
-                style={{
-                  fontFamily: "'Lato', sans-serif",
-                  fontSize: 8,
-                  letterSpacing: "0.28em",
-                  textTransform: "uppercase",
-                  color: GOLD,
-                  marginTop: 4,
-                  whiteSpace: "nowrap",
-                  fontWeight: 700,
-                }}
-              >
-                — Real Estate & Investments —
-              </span>
+              />
             </a>
 
             {/* RIGHT NAV */}
@@ -463,40 +277,37 @@ export default function Navbar() {
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: "clamp(16px,2.5vw,36px)",
+                gap: "clamp(16px,2vw,30px)",
               }}
             >
               {navLinks.slice(3).map((link, i) => (
                 <NavItem key={i} link={link} scrolled={scrolled} />
               ))}
-              {/* CTA */}
+
               <a
                 href="/authentication"
                 style={{
                   fontFamily: "'Lato', sans-serif",
                   fontSize: 11,
                   fontWeight: 700,
-                  letterSpacing: "0.12em",
+                  letterSpacing: "0.10em",
                   textTransform: "uppercase",
-                  background: ROYAL,
+                  background: "transparent",
                   color: GOLD,
                   textDecoration: "none",
-                  padding: "9px 22px",
+                  padding: "7px 18px",
                   borderRadius: 99,
                   border: `1.5px solid ${GOLD}`,
                   whiteSpace: "nowrap",
-                  boxShadow: `0 4px 16px rgba(10,17,114,0.18)`,
                   transition: "all 0.25s",
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background = GOLD;
                   e.currentTarget.style.color = ROYAL;
-                  e.currentTarget.style.transform = "scale(1.03)";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = ROYAL;
+                  e.currentTarget.style.background = "transparent";
                   e.currentTarget.style.color = GOLD;
-                  e.currentTarget.style.transform = "scale(1)";
                 }}
               >
                 Account
@@ -514,15 +325,15 @@ export default function Navbar() {
                 border: "none",
                 cursor: "pointer",
                 padding: 6,
-                color: ROYAL,
+                color: "#FFFFFF",
                 borderRadius: 8,
                 transition: "background 0.2s",
               }}
             >
               {menuOpen ? (
-                <X size={24} strokeWidth={1.8} />
+                <X size={22} strokeWidth={1.8} />
               ) : (
-                <Menu size={24} strokeWidth={1.8} />
+                <Menu size={22} strokeWidth={1.8} />
               )}
             </button>
           </div>
@@ -546,9 +357,8 @@ export default function Navbar() {
                 top: 0,
                 right: 0,
                 bottom: 0,
-                width: "min(340px, 88vw)",
+                width: "min(320px, 88vw)",
                 background: OFFWHITE,
-                boxShadow: "-8px 0 48px rgba(10,17,114,0.18)",
                 display: "flex",
                 flexDirection: "column",
                 animation:
@@ -562,7 +372,7 @@ export default function Navbar() {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  padding: "20px 22px 16px",
+                  padding: "16px 20px",
                   borderBottom: `1px solid ${CREAM}`,
                   background: ROYAL,
                 }}
@@ -571,10 +381,10 @@ export default function Navbar() {
                   <span
                     style={{
                       fontFamily: "'Playfair Display', serif",
-                      fontSize: 17,
+                      fontSize: 16,
                       fontWeight: 700,
                       color: OFFWHITE,
-                      letterSpacing: "0.14em",
+                      letterSpacing: "0.12em",
                       textTransform: "uppercase",
                     }}
                   >
@@ -604,138 +414,46 @@ export default function Navbar() {
                     padding: 4,
                   }}
                 >
-                  <X size={22} strokeWidth={1.8} />
+                  <X size={20} strokeWidth={1.8} />
                 </button>
               </div>
 
               {/* Nav links */}
-              <nav style={{ padding: "10px 0", flex: 1 }}>
+              <nav style={{ padding: "8px 0", flex: 1 }}>
                 {navLinks.map((link, i) => (
-                  <div key={i}>
-                    {link.children ? (
-                      <>
-                        <button
-                          onClick={() =>
-                            setOpenMobile(openMobile === i ? null : i)
-                          }
-                          style={{
-                            width: "100%",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            padding: "13px 22px",
-                            background: "none",
-                            border: "none",
-                            cursor: "pointer",
-                            fontFamily: "'Lato'",
-                            fontSize: 12,
-                            fontWeight: 700,
-                            letterSpacing: "0.10em",
-                            textTransform: "uppercase",
-                            color: ROYAL,
-                            borderBottom: `1px solid ${CREAM}`,
-                            transition: "background 0.2s",
-                          }}
-                          onMouseEnter={(e) =>
-                            (e.currentTarget.style.background = CREAM)
-                          }
-                          onMouseLeave={(e) =>
-                            (e.currentTarget.style.background = "none")
-                          }
-                        >
-                          {link.label}
-                          <ChevronDown
-                            size={14}
-                            strokeWidth={2}
-                            color={GOLD}
-                            style={{
-                              transform:
-                                openMobile === i
-                                  ? "rotate(180deg)"
-                                  : "rotate(0)",
-                              transition: "transform 0.25s",
-                            }}
-                          />
-                        </button>
-                        <div
-                          style={{
-                            maxHeight:
-                              openMobile === i
-                                ? `${link.children.length * 46}px`
-                                : 0,
-                            overflow: "hidden",
-                            transition:
-                              "max-height 0.35s cubic-bezier(0.4,0,0.2,1)",
-                            background: CREAM,
-                          }}
-                        >
-                          {link.children.map((child, ci) => (
-                            <a
-                              key={ci}
-                              href={child.href}
-                              onClick={() => setMenuOpen(false)}
-                              style={{
-                                display: "block",
-                                padding: "11px 36px",
-                                fontFamily: "'Lato'",
-                                fontSize: 12.5,
-                                color: NAVY,
-                                textDecoration: "none",
-                                borderBottom: `1px solid rgba(10,17,114,0.08)`,
-                                letterSpacing: "0.03em",
-                                transition: "color 0.2s, padding-left 0.2s",
-                              }}
-                              onMouseEnter={(e) => {
-                                e.currentTarget.style.color = ROYAL;
-                                e.currentTarget.style.paddingLeft = "44px";
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.color = NAVY;
-                                e.currentTarget.style.paddingLeft = "36px";
-                              }}
-                            >
-                              {child.label}
-                            </a>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <a
-                        href={link.href}
-                        onClick={() => setMenuOpen(false)}
-                        style={{
-                          display: "block",
-                          padding: "13px 22px",
-                          fontFamily: "'Lato'",
-                          fontSize: 12,
-                          fontWeight: 700,
-                          letterSpacing: "0.10em",
-                          textTransform: "uppercase",
-                          color: ROYAL,
-                          textDecoration: "none",
-                          borderBottom: `1px solid ${CREAM}`,
-                          transition: "background 0.2s, color 0.2s",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = CREAM;
-                          e.currentTarget.style.color = GOLD;
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = "none";
-                          e.currentTarget.style.color = ROYAL;
-                        }}
-                      >
-                        {link.label}
-                      </a>
-                    )}
-                  </div>
+                  <a
+                    key={i}
+                    href={link.href}
+                    onClick={() => setMenuOpen(false)}
+                    style={{
+                      display: "block",
+                      padding: "12px 20px",
+                      fontFamily: "'Lato'",
+                      fontSize: 13,
+                      fontWeight: 400,
+                      color: ROYAL,
+                      textDecoration: "none",
+                      borderBottom: `1px solid ${CREAM}`,
+                      transition: "background 0.2s, color 0.2s",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = CREAM;
+                      e.currentTarget.style.color = GOLD;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "none";
+                      e.currentTarget.style.color = ROYAL;
+                    }}
+                  >
+                    {link.label}
+                  </a>
                 ))}
               </nav>
 
               {/* Mobile CTA */}
               <div
                 style={{
-                  padding: "20px 22px 32px",
+                  padding: "16px 20px 28px",
                   borderTop: `1px solid ${CREAM}`,
                 }}
               >
@@ -748,15 +466,15 @@ export default function Navbar() {
                     background: ROYAL,
                     color: GOLD,
                     textDecoration: "none",
-                    borderRadius: 12,
+                    borderRadius: 10,
                     border: `1.5px solid ${GOLD}`,
-                    padding: "14px 24px",
+                    padding: "12px 20px",
                     fontFamily: "'Lato'",
                     fontSize: 12,
                     fontWeight: 700,
-                    letterSpacing: "0.12em",
+                    letterSpacing: "0.10em",
                     textTransform: "uppercase",
-                    marginBottom: 16,
+                    marginBottom: 14,
                   }}
                 >
                   View All Properties
@@ -767,13 +485,13 @@ export default function Navbar() {
                   {[
                     {
                       Icon: Phone,
-                      text: "+254 700 123 456",
-                      href: "tel:+254700123456",
+                      text: "+254 725 504 985",
+                      href: "tel:+254725504985",
                     },
                     {
                       Icon: Mail,
-                      text: "info@splendorholdings.com",
-                      href: "mailto:info@splendorholdings.com",
+                      text: "sally@splendorholdings.com",
+                      href: "mailto:sally@splendorholdings.com",
                     },
                   ].map(({ Icon, text, href }, i) => (
                     <a

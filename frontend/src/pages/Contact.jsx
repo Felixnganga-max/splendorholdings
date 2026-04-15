@@ -11,7 +11,13 @@ import {
   AtSign,
   Building2,
   MessageSquare,
+  Search,
+  X,
+  Bed,
+  Bath,
+  Maximize2,
 } from "lucide-react";
+import axios from "axios";
 
 if (!document.querySelector("#slendor-contact-fonts")) {
   const l = document.createElement("link");
@@ -21,6 +27,8 @@ if (!document.querySelector("#slendor-contact-fonts")) {
     "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600&family=Jost:wght@300;400;500;600&display=swap";
   document.head.appendChild(l);
 }
+
+const API_BASE_URL = "https://splendorholdings-2v47.vercel.app/api/v1";
 
 const interests = [
   "Buying a Property",
@@ -36,24 +44,24 @@ const contactDetails = [
   {
     icon: MapPin,
     label: "Visit Us",
-    value: "14 Riverside Drive, Westlands, Nairobi",
+    value: "Senteu Plaza, Kilimani, Nairobi",
     sub: "Simba Lane, Nyali, Mombasa",
     accent: "#c2884a",
   },
   {
     icon: Phone,
     label: "Call Us",
-    value: "+254 700 123 456",
-    sub: "+254 729 815 643",
-    href: "tel:+254700123456",
+    value: "+254 725 504 985",
+    sub: "Call or WhatsApp",
+    href: "tel:+254725504985",
     accent: "#7B2D8B",
   },
   {
     icon: Mail,
     label: "Email Us",
-    value: "info@slendorholdings.com",
-    sub: "nairobi@slendorholdings.com",
-    href: "mailto:info@slendorholdings.com",
+    value: "sally@splendorholdings.com",
+    sub: "We reply within 2 business hours",
+    href: "mailto:sally@splendorholdings.com",
     accent: "#0d6e5e",
   },
   {
@@ -65,7 +73,6 @@ const contactDetails = [
   },
 ];
 
-/* ── Intersection reveal hook ── */
 function useReveal(delay = 0) {
   const [vis, setVis] = useState(false);
   const ref = useRef(null);
@@ -80,6 +87,407 @@ function useReveal(delay = 0) {
     return () => obs.disconnect();
   }, []);
   return [ref, vis, delay];
+}
+
+/* ── Property search dropdown ── */
+function PropertyPicker({ value, onChange }) {
+  const [query, setQuery] = useState("");
+  const [properties, setProperties] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const containerRef = useRef(null);
+  const debounceRef = useRef(null);
+
+  // Fetch all properties on mount
+  useEffect(() => {
+    const fetchAll = async () => {
+      setLoading(true);
+      try {
+        const res = await axios.get(`${API_BASE_URL}/properties?limit=100`);
+        const data =
+          res.data?.data?.properties ||
+          res.data?.data ||
+          res.data?.properties ||
+          [];
+        setProperties(Array.isArray(data) ? data : []);
+      } catch (e) {
+        setProperties([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAll();
+  }, []);
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = properties.filter((p) => {
+    const q = query.toLowerCase();
+    return (
+      !q ||
+      (p.name || "").toLowerCase().includes(q) ||
+      (p.location || "").toLowerCase().includes(q) ||
+      (p.type || "").toLowerCase().includes(q)
+    );
+  });
+
+  const selected = value ? properties.find((p) => p._id === value) : null;
+
+  const borderColor = focused ? "#c2884a" : "#e2d5c8";
+  const glow = focused ? "0 0 0 3px rgba(194,136,74,0.12)" : "none";
+
+  return (
+    <div ref={containerRef} style={{ position: "relative" }}>
+      {/* Trigger */}
+      <div
+        onClick={() => {
+          setOpen((o) => !o);
+          setFocused(true);
+        }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "14px 14px",
+          borderRadius: 12,
+          border: `1.5px solid ${borderColor}`,
+          background: focused ? "#fffdf9" : "#fdf9f5",
+          boxShadow: glow,
+          cursor: "pointer",
+          transition: "all 0.25s ease",
+          minHeight: 52,
+        }}
+      >
+        <Building2
+          size={15}
+          color={focused ? "#c2884a" : "#c8a882"}
+          strokeWidth={1.7}
+          style={{ flexShrink: 0 }}
+        />
+        {selected ? (
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontFamily: "'Jost', sans-serif",
+                fontSize: 13,
+                color: "#3d2413",
+                fontWeight: 500,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {selected.name}
+            </div>
+            <div
+              style={{
+                fontFamily: "'Jost', sans-serif",
+                fontSize: 11,
+                color: "#b09070",
+              }}
+            >
+              {selected.location}
+            </div>
+          </div>
+        ) : (
+          <span
+            style={{
+              fontFamily: "'Jost', sans-serif",
+              fontSize: 13,
+              color: "#b09070",
+              flex: 1,
+            }}
+          >
+            Search for a property (optional)
+          </span>
+        )}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flexShrink: 0,
+          }}
+        >
+          {selected && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange(null);
+                setQuery("");
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                padding: 2,
+              }}
+            >
+              <X size={13} color="#b09070" />
+            </button>
+          )}
+          <ChevronDown
+            size={13}
+            color="#c2884a"
+            style={{
+              transform: open ? "rotate(180deg)" : "none",
+              transition: "transform 0.2s",
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Dropdown */}
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 6px)",
+            left: 0,
+            right: 0,
+            background: "#fff",
+            borderRadius: 14,
+            border: "1.5px solid #e2d5c8",
+            boxShadow: "0 16px 48px rgba(0,0,0,0.14)",
+            zIndex: 100,
+            maxHeight: 340,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
+          {/* Search box */}
+          <div
+            style={{
+              padding: "10px 12px",
+              borderBottom: "1px solid #f0e8df",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <Search size={13} color="#c2884a" strokeWidth={2} />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Type to filter..."
+              style={{
+                flex: 1,
+                border: "none",
+                outline: "none",
+                fontFamily: "'Jost', sans-serif",
+                fontSize: 13,
+                color: "#3d2413",
+                background: "transparent",
+              }}
+            />
+            {query && (
+              <button
+                onClick={() => setQuery("")}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  display: "flex",
+                }}
+              >
+                <X size={12} color="#b09070" />
+              </button>
+            )}
+          </div>
+
+          {/* List */}
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            {loading ? (
+              <div
+                style={{
+                  padding: "20px",
+                  textAlign: "center",
+                  fontFamily: "'Jost', sans-serif",
+                  fontSize: 13,
+                  color: "#b09070",
+                }}
+              >
+                Loading properties...
+              </div>
+            ) : filtered.length === 0 ? (
+              <div
+                style={{
+                  padding: "20px",
+                  textAlign: "center",
+                  fontFamily: "'Jost', sans-serif",
+                  fontSize: 13,
+                  color: "#b09070",
+                }}
+              >
+                No properties found
+              </div>
+            ) : (
+              filtered.map((p) => {
+                const img =
+                  p.images?.find((i) => i.isPrimary)?.url || p.images?.[0]?.url;
+                const isSelected = value === p._id;
+                return (
+                  <div
+                    key={p._id}
+                    onClick={() => {
+                      onChange(p._id);
+                      setOpen(false);
+                      setFocused(false);
+                    }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: "10px 14px",
+                      cursor: "pointer",
+                      background: isSelected ? "#fdf3e7" : "transparent",
+                      borderBottom: "1px solid #faf5ef",
+                      transition: "background 0.15s",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isSelected)
+                        e.currentTarget.style.background = "#fdf8f3";
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isSelected)
+                        e.currentTarget.style.background = "transparent";
+                    }}
+                  >
+                    {/* Thumbnail */}
+                    <div
+                      style={{
+                        width: 48,
+                        height: 36,
+                        borderRadius: 8,
+                        overflow: "hidden",
+                        flexShrink: 0,
+                        background: "#f0e8df",
+                      }}
+                    >
+                      {img ? (
+                        <img
+                          src={img}
+                          alt={p.name}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          <Building2 size={14} color="#c2884a" />
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontFamily: "'Jost', sans-serif",
+                          fontSize: 13,
+                          fontWeight: 500,
+                          color: "#1a0f00",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {p.name}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          marginTop: 2,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontFamily: "'Jost', sans-serif",
+                            fontSize: 10,
+                            color: "#b09070",
+                          }}
+                        >
+                          {p.location}
+                        </span>
+                        {p.beds > 0 && (
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 2,
+                              fontFamily: "'Jost', sans-serif",
+                              fontSize: 10,
+                              color: "#b09070",
+                            }}
+                          >
+                            <Bed size={9} /> {p.beds}bd
+                          </span>
+                        )}
+                        {p.baths > 0 && (
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 2,
+                              fontFamily: "'Jost', sans-serif",
+                              fontSize: 10,
+                              color: "#b09070",
+                            }}
+                          >
+                            <Bath size={9} /> {p.baths}ba
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        fontFamily: "'Cormorant Garamond', serif",
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: "#7B2D8B",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {p.priceLabel ||
+                        (p.price
+                          ? `KES ${(p.price / 1_000_000).toFixed(1)}M`
+                          : "—")}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ── Single floating-label input ── */
@@ -112,11 +520,11 @@ function Field({
     transition: "all 0.25s ease",
     boxShadow: glow,
     appearance: "none",
+    boxSizing: "border-box",
   };
 
   return (
     <div style={{ position: "relative" }}>
-      {/* Floating label */}
       <label
         style={{
           position: "absolute",
@@ -138,7 +546,6 @@ function Field({
         {required && " *"}
       </label>
 
-      {/* Leading icon */}
       {Icon && (
         <div
           style={{
@@ -228,8 +635,10 @@ export default function Contact() {
     interest: "",
     message: "",
   });
+  const [selectedPropertyId, setSelectedPropertyId] = useState(null);
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
   const [parallax, setParallax] = useState(0);
   const heroRef = useRef(null);
 
@@ -246,13 +655,33 @@ export default function Contact() {
     return () => window.removeEventListener("scroll", fn);
   }, []);
 
-  const submit = () => {
+  const submit = async () => {
     if (!form.name || !form.email || !form.message) return;
     setSending(true);
-    setTimeout(() => {
-      setSending(false);
+    setSendError("");
+    try {
+      const token = localStorage.getItem("token");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const payload = {
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        message: form.message,
+        inquiryType: form.interest || "general",
+        ...(selectedPropertyId ? { property: selectedPropertyId } : {}),
+      };
+
+      await axios.post(`${API_BASE_URL}/inquiries`, payload, { headers });
       setSent(true);
-    }, 1800);
+    } catch (err) {
+      setSendError(
+        err.response?.data?.message ||
+          "Failed to send. Please try again or email us directly.",
+      );
+    } finally {
+      setSending(false);
+    }
   };
 
   const [cardRef, cardVis] = useReveal(0);
@@ -268,8 +697,6 @@ export default function Contact() {
     >
       <style>{`
         @keyframes fadeUp   { from { opacity:0; transform:translateY(32px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes fadeLeft { from { opacity:0; transform:translateX(-28px); } to { opacity:1; transform:translateX(0); } }
-        @keyframes fadeRight{ from { opacity:0; transform:translateX(28px); } to { opacity:1; transform:translateX(0); } }
         @keyframes pulse    { 0%,100%{ opacity:1; } 50%{ opacity:0.5; } }
         @keyframes spin     { to { transform:rotate(360deg); } }
         @keyframes popIn    { from{ opacity:0; transform:scale(0.85); } to{ opacity:1; transform:scale(1); } }
@@ -299,9 +726,7 @@ export default function Contact() {
         }
       `}</style>
 
-      {/* ═══════════════════════════════
-          HERO — warm parchment + parallax
-      ═══════════════════════════════ */}
+      {/* HERO */}
       <section
         ref={heroRef}
         style={{
@@ -311,7 +736,6 @@ export default function Contact() {
           overflow: "hidden",
         }}
       >
-        {/* Parallax photo */}
         <div
           style={{
             position: "absolute",
@@ -324,7 +748,6 @@ export default function Contact() {
             willChange: "transform",
           }}
         />
-        {/* Layered warm overlays */}
         <div
           style={{
             position: "absolute",
@@ -342,21 +765,7 @@ export default function Contact() {
             pointerEvents: "none",
           }}
         />
-        {/* Decorative diagonal rule */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            bottom: 0,
-            left: "55%",
-            width: 1,
-            background: "rgba(245,158,11,0.08)",
-            transform: "skewX(-8deg)",
-            pointerEvents: "none",
-          }}
-        />
 
-        {/* Hero text */}
         <div
           style={{
             position: "absolute",
@@ -368,7 +777,6 @@ export default function Contact() {
             animation: "fadeUp 0.9s cubic-bezier(0.22,1,0.36,1) forwards",
           }}
         >
-          {/* Breadcrumb */}
           <div
             style={{
               display: "flex",
@@ -463,7 +871,6 @@ export default function Contact() {
             from first enquiry to final key handover.
           </p>
 
-          {/* Quick pills */}
           <div
             style={{
               display: "flex",
@@ -475,13 +882,13 @@ export default function Contact() {
             {[
               {
                 icon: Phone,
-                text: "+254 700 123 456",
-                href: "tel:+254700123456",
+                text: "+254 725 504 985",
+                href: "tel:+254725504985",
               },
               {
                 icon: Mail,
-                text: "info@slendorholdings.com",
-                href: "mailto:info@slendorholdings.com",
+                text: "sally@splendorholdings.com",
+                href: "mailto:sally@splendorholdings.com",
               },
             ].map(({ icon: Icon, text, href }, i) => (
               <a
@@ -524,9 +931,7 @@ export default function Contact() {
         </div>
       </section>
 
-      {/* ═══════════════════════════════
-          BODY
-      ═══════════════════════════════ */}
+      {/* BODY */}
       <div
         style={{
           maxWidth: 1240,
@@ -601,7 +1006,7 @@ export default function Contact() {
           </p>
         </div>
 
-        {/* ── Contact info cards ── */}
+        {/* Info cards */}
         <div ref={cardRef} className="detail-grid" style={{ marginBottom: 48 }}>
           {contactDetails.map((d, i) => {
             const Icon = d.icon;
@@ -701,19 +1106,19 @@ export default function Contact() {
           })}
         </div>
 
-        {/* ── Two column: left info | right form ── */}
+        {/* Two col */}
         <div className="contact-grid">
-          {/* LEFT — warm info panel */}
+          {/* LEFT */}
           <div
+            ref={formRef2}
             style={{
               opacity: formVis ? 1 : 0,
               transform: formVis ? "translateX(0)" : "translateX(-28px)",
               transition:
                 "opacity 0.75s ease 0.15s, transform 0.75s cubic-bezier(0.22,1,0.36,1) 0.15s",
             }}
-            ref={formRef2}
           >
-            {/* Dark "what to expect" card */}
+            {/* Dark card */}
             <div
               style={{
                 background: "linear-gradient(148deg, #1c0e02 0%, #2e1800 100%)",
@@ -859,9 +1264,9 @@ export default function Contact() {
               </div>
             </div>
 
-            {/* WhatsApp button */}
+            {/* WhatsApp */}
             <a
-              href="https://wa.me/254700123456"
+              href="https://wa.me/254725504985"
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -913,7 +1318,7 @@ export default function Contact() {
                     marginBottom: 2,
                   }}
                 >
-                  Chat on WhatsApp
+                  WhatsApp Sally
                 </div>
                 <div
                   style={{
@@ -923,7 +1328,7 @@ export default function Contact() {
                     fontWeight: 300,
                   }}
                 >
-                  Instant replies during business hours
+                  +254 725 504 985 · Instant replies during business hours
                 </div>
               </div>
               <svg
@@ -941,7 +1346,7 @@ export default function Contact() {
               </svg>
             </a>
 
-            {/* Map embed */}
+            {/* Map */}
             <div
               style={{
                 borderRadius: 18,
@@ -952,7 +1357,7 @@ export default function Contact() {
               }}
             >
               <iframe
-                title="Slendor Location"
+                title="Splendor Location"
                 src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3988.808792838638!2d36.80249931475417!3d-1.2696080990692!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x182f170c2b9f2a2f%3A0x1c2d9a3b4e5f6a7b!2sWestlands%2C%20Nairobi!5e0!3m2!1sen!2ske!4v1680000000000!5m2!1sen!2ske"
                 width="100%"
                 height="100%"
@@ -978,7 +1383,6 @@ export default function Contact() {
             }}
           >
             {sent ? (
-              /* Success */
               <div
                 style={{
                   textAlign: "center",
@@ -1028,8 +1432,7 @@ export default function Contact() {
                   <strong style={{ color: "#7B2D8B", fontWeight: 600 }}>
                     {form.name}
                   </strong>
-                  . One of our property specialists will reach out within 2
-                  business hours.
+                  . Sally will reach out within 2 business hours.
                 </p>
                 <button
                   onClick={() => {
@@ -1041,6 +1444,7 @@ export default function Contact() {
                       interest: "",
                       message: "",
                     });
+                    setSelectedPropertyId(null);
                   }}
                   style={{
                     fontFamily: "'Jost'",
@@ -1070,7 +1474,6 @@ export default function Contact() {
               </div>
             ) : (
               <>
-                {/* Form header */}
                 <div style={{ marginBottom: 30 }}>
                   <div
                     style={{
@@ -1162,6 +1565,39 @@ export default function Contact() {
                       options={interests}
                     />
                   </div>
+
+                  {/* Property picker */}
+                  <div>
+                    <div
+                      style={{
+                        fontFamily: "'Jost'",
+                        fontSize: 10,
+                        fontWeight: 600,
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                        color: "#c2884a",
+                        marginBottom: 6,
+                      }}
+                    >
+                      Property (optional)
+                    </div>
+                    <PropertyPicker
+                      value={selectedPropertyId}
+                      onChange={setSelectedPropertyId}
+                    />
+                    <div
+                      style={{
+                        fontFamily: "'Jost'",
+                        fontSize: 11,
+                        color: "#c8a882",
+                        marginTop: 5,
+                      }}
+                    >
+                      Select a property if your inquiry is about a specific
+                      listing
+                    </div>
+                  </div>
+
                   <Field
                     label="Your Message"
                     type="textarea"
@@ -1169,6 +1605,22 @@ export default function Contact() {
                     onChange={set("message")}
                     required
                   />
+
+                  {sendError && (
+                    <div
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 10,
+                        background: "#fff0f0",
+                        border: "1px solid #fca5a5",
+                        fontFamily: "'Jost'",
+                        fontSize: 13,
+                        color: "#dc2626",
+                      }}
+                    >
+                      {sendError}
+                    </div>
+                  )}
 
                   <p
                     style={{
@@ -1229,7 +1681,7 @@ export default function Contact() {
                             borderTopColor: "#fff",
                             animation: "spin 0.7s linear infinite",
                           }}
-                        />{" "}
+                        />
                         Sending…
                       </>
                     ) : (

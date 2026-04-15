@@ -3,6 +3,7 @@ import {
   Upload,
   MapPin,
   Home,
+  Building2,
   DollarSign,
   Bed,
   Bath,
@@ -16,6 +17,10 @@ import {
   Percent,
   Calendar,
   Star,
+  Layers,
+  ShoppingCart,
+  Key,
+  LandPlot,
 } from "lucide-react";
 import { useAddProperty } from "../Hooks/useAddProperty";
 
@@ -28,6 +33,12 @@ const PROPERTY_TYPES = [
   "Commercial",
 ];
 const BADGES = ["Featured", "New Listing", "For Sale", "For Rent", "Off-Plan"];
+const LAND_UNITS = [
+  { value: "acres", label: "Acres" },
+  { value: "hectares", label: "Hectares" },
+  { value: "sqm", label: "m²" },
+  { value: "sqft", label: "sq ft" },
+];
 
 // ── Reusable primitives ──────────────────────────────────────────────────────
 const Field = ({ label, children, hint }) => (
@@ -125,15 +136,9 @@ const SectionTitle = ({ children }) => (
   </h3>
 );
 
-// ── Divider with label ───────────────────────────────────────────────────────
 const OrDivider = () => (
   <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      margin: "4px 0",
-    }}
+    style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0" }}
   >
     <div style={{ flex: 1, height: 1, background: "#f0e6d8" }} />
     <span
@@ -151,7 +156,6 @@ const OrDivider = () => (
   </div>
 );
 
-// ── Toggle switch ────────────────────────────────────────────────────────────
 const Toggle = ({ checked, onChange, label, hint }) => (
   <div
     style={{
@@ -221,6 +225,56 @@ const Toggle = ({ checked, onChange, label, hint }) => (
   </div>
 );
 
+// ── Segmented pill selector ───────────────────────────────────────────────────
+const SegmentedSelector = ({
+  options,
+  value,
+  onChange,
+  accent = "#7B2D8B",
+}) => (
+  <div
+    style={{
+      display: "flex",
+      background: "#fdf8f3",
+      borderRadius: 12,
+      border: "1.5px solid #f0e6d8",
+      padding: 4,
+      gap: 4,
+    }}
+  >
+    {options.map((opt) => {
+      const active = value === opt.value;
+      return (
+        <button
+          key={opt.value}
+          onClick={() => onChange(opt.value)}
+          style={{
+            flex: 1,
+            padding: "9px 10px",
+            borderRadius: 9,
+            border: "none",
+            background: active ? accent : "transparent",
+            color: active ? "#fff" : "#7a6555",
+            fontFamily: "'Jost', sans-serif",
+            fontSize: 12,
+            fontWeight: active ? 600 : 400,
+            cursor: "pointer",
+            transition: "all 0.18s",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 5,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {opt.icon && <opt.icon size={13} strokeWidth={active ? 2.2 : 1.8} />}
+          {opt.label}
+        </button>
+      );
+    })}
+  </div>
+);
+
 // ── Main component ───────────────────────────────────────────────────────────
 export default function AddPropertyPage() {
   const fileInputRef = useRef(null);
@@ -247,11 +301,17 @@ export default function AddPropertyPage() {
     e.preventDefault();
     addImages(e.dataTransfer.files);
   };
-
   const handleFileInput = (e) => {
     addImages(e.target.files);
     e.target.value = "";
   };
+
+  const isLand = form.type === "Land/Plot";
+  const showSale =
+    form.listingIntent === "sale" || form.listingIntent === "both";
+  const showRent =
+    form.listingIntent === "rent" || form.listingIntent === "both";
+  const isUnit = form.listingMode === "unit";
 
   return (
     <div style={{ padding: "36px 40px", maxWidth: 960, margin: "0 auto" }}>
@@ -282,7 +342,7 @@ export default function AddPropertyPage() {
         </h1>
       </div>
 
-      {/* ── Success banner ── */}
+      {/* ── Banners ── */}
       {success && (
         <div
           style={{
@@ -294,10 +354,9 @@ export default function AddPropertyPage() {
             borderRadius: 14,
             padding: "16px 20px",
             marginBottom: 28,
-            animation: "slideUp 0.3s ease",
           }}
         >
-          <style>{`@keyframes slideUp { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }`}</style>
+          <style>{`@keyframes slideUp { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
           <CheckCircle size={18} color="#0d6e5e" />
           <span
             style={{
@@ -311,8 +370,6 @@ export default function AddPropertyPage() {
           </span>
         </div>
       )}
-
-      {/* ── Error banner ── */}
       {error && (
         <div
           style={{
@@ -324,7 +381,6 @@ export default function AddPropertyPage() {
             borderRadius: 14,
             padding: "16px 20px",
             marginBottom: 28,
-            animation: "slideUp 0.3s ease",
           }}
         >
           <AlertCircle size={18} color="#dc2626" />
@@ -341,6 +397,62 @@ export default function AddPropertyPage() {
         </div>
       )}
 
+      {/* ══════════════════════════════════════════════════════════════════════
+          STEP 1 — Listing mode & intent  (full width, above the two columns)
+      ══════════════════════════════════════════════════════════════════════ */}
+      <div style={{ ...card, marginBottom: 28 }}>
+        <SectionTitle>Listing Setup</SectionTitle>
+        <div
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}
+        >
+          {/* Listing Mode */}
+          <Field
+            label="What are you listing?"
+            hint={
+              isUnit
+                ? "You'll also specify the parent building name below."
+                : "The entire property is on offer as one."
+            }
+          >
+            <SegmentedSelector
+              value={form.listingMode}
+              onChange={(v) => setField("listingMode", v)}
+              accent="#1a0f00"
+              options={[
+                { value: "whole", label: "Entire Property", icon: Home },
+                { value: "unit", label: "Unit / Section", icon: Layers },
+              ]}
+            />
+          </Field>
+
+          {/* Listing Intent */}
+          <Field
+            label="Available for *"
+            hint={
+              form.listingIntent === "both"
+                ? "Both sale and rental pricing will be shown."
+                : form.listingIntent === "rent"
+                  ? "Only rental pricing applies."
+                  : "Only sale pricing applies."
+            }
+          >
+            <SegmentedSelector
+              value={form.listingIntent}
+              onChange={(v) => setField("listingIntent", v)}
+              accent="#7B2D8B"
+              options={[
+                { value: "sale", label: "Sale", icon: ShoppingCart },
+                { value: "rent", label: "Rent", icon: Key },
+                { value: "both", label: "Sale & Rent", icon: Star },
+              ]}
+            />
+          </Field>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          TWO COLUMNS
+      ══════════════════════════════════════════════════════════════════════ */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28 }}>
         {/* ════════════════ LEFT COLUMN ════════════════ */}
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
@@ -517,14 +629,32 @@ export default function AddPropertyPage() {
           <div style={card}>
             <SectionTitle>Property Details</SectionTitle>
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              <Field label="Property Name *">
+              {/* Building name — only shown in unit mode */}
+              {isUnit && (
+                <Field
+                  label="Building / Complex Name *"
+                  hint="The parent building this unit belongs to"
+                >
+                  <Input
+                    icon={Building2}
+                    value={form.buildingName}
+                    onChange={set("buildingName")}
+                    placeholder="e.g. Sunshine Apartments"
+                  />
+                </Field>
+              )}
+
+              <Field label={isUnit ? "Unit Name *" : "Property Name *"}>
                 <Input
                   icon={Home}
                   value={form.name}
                   onChange={set("name")}
-                  placeholder="e.g. Amalia Springs"
+                  placeholder={
+                    isUnit ? "e.g. 2 Bedroom Unit" : "e.g. Amalia Springs"
+                  }
                 />
               </Field>
+
               <Field label="Location *">
                 <Input
                   icon={MapPin}
@@ -534,161 +664,261 @@ export default function AddPropertyPage() {
                 />
               </Field>
 
-              {/* ── Pricing ── */}
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 12,
-                }}
-              >
-                <Field label="Price (KES) *">
-                  <Input
-                    icon={DollarSign}
-                    value={form.price}
-                    onChange={set("price")}
-                    placeholder="24500000"
-                    type="number"
-                    min="0"
-                  />
-                </Field>
-                <Field label="Price Label" hint="e.g. Per month">
-                  <Input
-                    icon={Tag}
-                    value={form.priceLabel}
-                    onChange={set("priceLabel")}
-                    placeholder="Per month"
-                  />
-                </Field>
-              </div>
-
-              {/* ── Offer pricing ── */}
-              <div
-                style={{
-                  background: "#fdf6ee",
-                  border: "1.5px solid #f0e6d8",
-                  borderRadius: 14,
-                  padding: "16px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                }}
-              >
-                <p
-                  style={{
-                    fontFamily: "'Jost', sans-serif",
-                    fontSize: 11,
-                    fontWeight: 500,
-                    color: "#b8a090",
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase",
-                    marginBottom: 2,
-                  }}
+              {/* ── Sale pricing — only when intent includes sale ── */}
+              {showSale && (
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 14 }}
                 >
-                  Offer / Discount{" "}
-                  <span
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
+                    <ShoppingCart size={13} color="#b45309" />
+                    <span
+                      style={{
+                        fontFamily: "'Jost', sans-serif",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: "#b45309",
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      Sale Pricing
+                    </span>
+                  </div>
+
+                  <div
                     style={{
-                      fontWeight: 400,
-                      textTransform: "none",
-                      letterSpacing: 0,
-                      color: "#c8b09a",
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 12,
                     }}
                   >
-                    — optional, pick one
-                  </span>
-                </p>
+                    <Field label="Sale Price (KES) *">
+                      <Input
+                        icon={DollarSign}
+                        value={form.price}
+                        onChange={set("price")}
+                        placeholder="24500000"
+                        type="number"
+                        min="0"
+                      />
+                    </Field>
+                    <Field label="Price Label" hint="e.g. Per sqft">
+                      <Input
+                        icon={Tag}
+                        value={form.priceLabel}
+                        onChange={set("priceLabel")}
+                        placeholder="e.g. Negotiable"
+                      />
+                    </Field>
+                  </div>
 
-                <Field
-                  label="Fixed Offer Price (KES)"
-                  hint="Overrides the base price display"
+                  {/* Offer / Discount */}
+                  <div
+                    style={{
+                      background: "#fdf6ee",
+                      border: "1.5px solid #f0e6d8",
+                      borderRadius: 14,
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 12,
+                    }}
+                  >
+                    <p
+                      style={{
+                        fontFamily: "'Jost', sans-serif",
+                        fontSize: 11,
+                        fontWeight: 500,
+                        color: "#b8a090",
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                        marginBottom: 2,
+                      }}
+                    >
+                      Offer / Discount{" "}
+                      <span
+                        style={{
+                          fontWeight: 400,
+                          textTransform: "none",
+                          letterSpacing: 0,
+                          color: "#c8b09a",
+                        }}
+                      >
+                        — optional, pick one
+                      </span>
+                    </p>
+                    <Field
+                      label="Fixed Offer Price (KES)"
+                      hint="Overrides the base price display"
+                    >
+                      <Input
+                        icon={DollarSign}
+                        value={form.offerPrice}
+                        onChange={(e) =>
+                          setOfferField("offerPrice", e.target.value)
+                        }
+                        placeholder="e.g. 22000000"
+                        type="number"
+                        min="0"
+                        disabled={!!form.discountPercent}
+                        style={
+                          form.discountPercent
+                            ? { opacity: 0.4, cursor: "not-allowed" }
+                            : {}
+                        }
+                      />
+                    </Field>
+                    <OrDivider />
+                    <Field
+                      label="Discount (%)"
+                      hint="Auto-calculates the offer price"
+                    >
+                      <Input
+                        icon={Percent}
+                        value={form.discountPercent}
+                        onChange={(e) =>
+                          setOfferField("discountPercent", e.target.value)
+                        }
+                        placeholder="e.g. 10"
+                        type="number"
+                        min="0"
+                        max="99"
+                        disabled={!!form.offerPrice}
+                        style={
+                          form.offerPrice
+                            ? { opacity: 0.4, cursor: "not-allowed" }
+                            : {}
+                        }
+                      />
+                    </Field>
+                    <Field label="Offer Expires">
+                      <Input
+                        icon={Calendar}
+                        value={form.offerExpiresAt}
+                        onChange={set("offerExpiresAt")}
+                        type="datetime-local"
+                        style={
+                          !form.offerPrice && !form.discountPercent
+                            ? { opacity: 0.5 }
+                            : {}
+                        }
+                      />
+                    </Field>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Rental pricing — only when intent includes rent ── */}
+              {showRent && (
+                <div
+                  style={{ display: "flex", flexDirection: "column", gap: 14 }}
                 >
-                  <Input
-                    icon={DollarSign}
-                    value={form.offerPrice}
-                    onChange={(e) =>
-                      setOfferField("offerPrice", e.target.value)
-                    }
-                    placeholder="e.g. 22000000"
-                    type="number"
-                    min="0"
-                    disabled={!!form.discountPercent}
-                    style={
-                      form.discountPercent
-                        ? { opacity: 0.4, cursor: "not-allowed" }
-                        : {}
-                    }
-                  />
-                </Field>
-
-                <OrDivider />
-
-                <Field
-                  label="Discount (%)"
-                  hint="Auto-calculates the offer price"
-                >
-                  <Input
-                    icon={Percent}
-                    value={form.discountPercent}
-                    onChange={(e) =>
-                      setOfferField("discountPercent", e.target.value)
-                    }
-                    placeholder="e.g. 10"
-                    type="number"
-                    min="0"
-                    max="99"
-                    disabled={!!form.offerPrice}
-                    style={
-                      form.offerPrice
-                        ? { opacity: 0.4, cursor: "not-allowed" }
-                        : {}
-                    }
-                  />
-                </Field>
-
-                <Field label="Offer Expires">
-                  <Input
-                    icon={Calendar}
-                    value={form.offerExpiresAt}
-                    onChange={set("offerExpiresAt")}
-                    type="datetime-local"
-                    style={
-                      !form.offerPrice && !form.discountPercent
-                        ? { opacity: 0.5 }
-                        : {}
-                    }
-                  />
-                </Field>
-              </div>
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
+                    <Key size={13} color="#7B2D8B" />
+                    <span
+                      style={{
+                        fontFamily: "'Jost', sans-serif",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: "#7B2D8B",
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      Rental Pricing
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      background: "#fdf6ff",
+                      border: "1.5px solid #e8d5f5",
+                      borderRadius: 14,
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 12,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 12,
+                      }}
+                    >
+                      <Field label="Rent / Month (KES)">
+                        <Input
+                          icon={Key}
+                          value={form.rentPerMonth}
+                          onChange={set("rentPerMonth")}
+                          placeholder="e.g. 45000"
+                          type="number"
+                          min="0"
+                        />
+                      </Field>
+                      <Field label="Rent / Day (KES)">
+                        <Input
+                          icon={Key}
+                          value={form.rentPerDay}
+                          onChange={set("rentPerDay")}
+                          placeholder="e.g. 5000"
+                          type="number"
+                          min="0"
+                        />
+                      </Field>
+                    </div>
+                    <Field
+                      label="Rental Label"
+                      hint="e.g. Per month, short-stay rate"
+                    >
+                      <Input
+                        icon={Tag}
+                        value={form.rentalLabel}
+                        onChange={set("rentalLabel")}
+                        placeholder="e.g. Per month"
+                      />
+                    </Field>
+                  </div>
+                </div>
+              )}
 
               {/* ── Beds / Baths / Area ── */}
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gridTemplateColumns: isLand ? "1fr 1fr" : "1fr 1fr 1fr",
                   gap: 12,
                 }}
               >
-                <Field label="Beds">
-                  <Input
-                    icon={Bed}
-                    value={form.beds}
-                    onChange={set("beds")}
-                    placeholder="4"
-                    type="number"
-                    min="0"
-                  />
-                </Field>
-                <Field label="Baths">
-                  <Input
-                    icon={Bath}
-                    value={form.baths}
-                    onChange={set("baths")}
-                    placeholder="3"
-                    type="number"
-                    min="0"
-                  />
-                </Field>
-                <Field label="Area m²">
+                {!isLand && (
+                  <>
+                    <Field label="Beds">
+                      <Input
+                        icon={Bed}
+                        value={form.beds}
+                        onChange={set("beds")}
+                        placeholder="4"
+                        type="number"
+                        min="0"
+                      />
+                    </Field>
+                    <Field label="Baths">
+                      <Input
+                        icon={Bath}
+                        value={form.baths}
+                        onChange={set("baths")}
+                        placeholder="3"
+                        type="number"
+                        min="0"
+                      />
+                    </Field>
+                  </>
+                )}
+                <Field label="Built-up Area (m²)">
                   <Input
                     icon={Maximize2}
                     value={form.area}
@@ -698,7 +928,100 @@ export default function AddPropertyPage() {
                     min="0"
                   />
                 </Field>
+                {/* Land area — always shown for Land/Plot, optional slot otherwise */}
+                {isLand && (
+                  <Field label="Land Area">
+                    {/* intentionally empty here — rendered below in full */}
+                  </Field>
+                )}
               </div>
+
+              {/* ── Land area full row — shown for Land/Plot ── */}
+              {isLand && (
+                <div
+                  style={{
+                    background: "#f0faf5",
+                    border: "1.5px solid #a7f3d0",
+                    borderRadius: 14,
+                    padding: "16px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                  }}
+                >
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 8 }}
+                  >
+                    <LandPlot size={13} color="#047857" />
+                    <span
+                      style={{
+                        fontFamily: "'Jost', sans-serif",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: "#047857",
+                        letterSpacing: "0.12em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      Land Size
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr auto",
+                      gap: 12,
+                      alignItems: "end",
+                    }}
+                  >
+                    <Field label="Land Area Value *">
+                      <Input
+                        icon={LandPlot}
+                        value={form.landAreaValue}
+                        onChange={set("landAreaValue")}
+                        placeholder="e.g. 2.5"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                      />
+                    </Field>
+                    <Field label="Unit">
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {LAND_UNITS.map((u) => (
+                          <button
+                            key={u.value}
+                            onClick={() => setField("landAreaUnit", u.value)}
+                            style={{
+                              padding: "10px 11px",
+                              borderRadius: 10,
+                              border:
+                                form.landAreaUnit === u.value
+                                  ? "none"
+                                  : "1.5px solid #a7f3d0",
+                              background:
+                                form.landAreaUnit === u.value
+                                  ? "#047857"
+                                  : "#f0faf5",
+                              color:
+                                form.landAreaUnit === u.value
+                                  ? "#fff"
+                                  : "#047857",
+                              fontFamily: "'Jost', sans-serif",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              transition: "all 0.18s",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {u.label}
+                          </button>
+                        ))}
+                      </div>
+                    </Field>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -798,11 +1121,7 @@ export default function AddPropertyPage() {
                       e.key === "Enter" && (e.preventDefault(), addFeature())
                     }
                     placeholder="e.g. Swimming pool, BQ, Solar…"
-                    style={{
-                      ...inputBase,
-                      fontSize: 12,
-                      padding: "10px 14px",
-                    }}
+                    style={{ ...inputBase, fontSize: 12, padding: "10px 14px" }}
                     onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
                     onBlur={(e) => (e.target.style.borderColor = "#f0e6d8")}
                   />
@@ -873,8 +1192,6 @@ export default function AddPropertyPage() {
                 label="Featured Listing"
                 hint="Pinned to the top of search results"
               />
-
-              {/* featuredUntil only shown when isFeatured is on */}
               {form.isFeatured && (
                 <Field
                   label="Featured Until"
@@ -933,16 +1250,14 @@ export default function AddPropertyPage() {
                 <Loader2
                   size={16}
                   style={{ animation: "spin 0.8s linear infinite" }}
-                />
+                />{" "}
                 Uploading & Saving…
               </>
             ) : (
               <>
-                <Star size={15} strokeWidth={2} />
-                List Property
+                <Star size={15} strokeWidth={2} /> List Property
               </>
             )}
-            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </button>
         </div>
       </div>
