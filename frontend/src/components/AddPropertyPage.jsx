@@ -10,10 +10,12 @@ import {
   CheckCircle,
   Plus,
   X,
-  Image as ImageIcon,
   Loader2,
   AlertCircle,
   Tag,
+  Percent,
+  Calendar,
+  Star,
 } from "lucide-react";
 import { useAddProperty } from "../Hooks/useAddProperty";
 
@@ -109,6 +111,116 @@ const card = {
   padding: "24px",
 };
 
+const SectionTitle = ({ children }) => (
+  <h3
+    style={{
+      fontFamily: "'Cormorant Garamond', serif",
+      fontSize: 18,
+      fontWeight: 700,
+      color: "#1a0f00",
+      marginBottom: 20,
+    }}
+  >
+    {children}
+  </h3>
+);
+
+// ── Divider with label ───────────────────────────────────────────────────────
+const OrDivider = () => (
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      margin: "4px 0",
+    }}
+  >
+    <div style={{ flex: 1, height: 1, background: "#f0e6d8" }} />
+    <span
+      style={{
+        fontFamily: "'Jost', sans-serif",
+        fontSize: 10,
+        color: "#c8b09a",
+        letterSpacing: "0.1em",
+        textTransform: "uppercase",
+      }}
+    >
+      or
+    </span>
+    <div style={{ flex: 1, height: 1, background: "#f0e6d8" }} />
+  </div>
+);
+
+// ── Toggle switch ────────────────────────────────────────────────────────────
+const Toggle = ({ checked, onChange, label, hint }) => (
+  <div
+    style={{
+      display: "flex",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 12,
+    }}
+  >
+    <div>
+      <p
+        style={{
+          fontFamily: "'Jost', sans-serif",
+          fontSize: 13,
+          fontWeight: 500,
+          color: "#1a0f00",
+          marginBottom: hint ? 3 : 0,
+        }}
+      >
+        {label}
+      </p>
+      {hint && (
+        <p
+          style={{
+            fontFamily: "'Jost', sans-serif",
+            fontSize: 11,
+            color: "#c8b09a",
+          }}
+        >
+          {hint}
+        </p>
+      )}
+    </div>
+    <button
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      style={{
+        flexShrink: 0,
+        width: 44,
+        height: 24,
+        borderRadius: 99,
+        border: "none",
+        background: checked
+          ? "linear-gradient(135deg,#7B2D8B,#4A1060)"
+          : "#e8ddd2",
+        cursor: "pointer",
+        position: "relative",
+        transition: "background 0.25s",
+        padding: 0,
+      }}
+    >
+      <span
+        style={{
+          position: "absolute",
+          top: 3,
+          left: checked ? 23 : 3,
+          width: 18,
+          height: 18,
+          borderRadius: "50%",
+          background: "#fff",
+          transition: "left 0.25s",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
+        }}
+      />
+    </button>
+  </div>
+);
+
 // ── Main component ───────────────────────────────────────────────────────────
 export default function AddPropertyPage() {
   const fileInputRef = useRef(null);
@@ -117,6 +229,7 @@ export default function AddPropertyPage() {
     form,
     set,
     setField,
+    setOfferField,
     imageFiles,
     addImages,
     removeImage,
@@ -137,11 +250,7 @@ export default function AddPropertyPage() {
 
   const handleFileInput = (e) => {
     addImages(e.target.files);
-    e.target.value = ""; // allow re-selecting same files
-  };
-
-  const handleSubmit = async () => {
-    await submit();
+    e.target.value = "";
   };
 
   return (
@@ -235,13 +344,12 @@ export default function AddPropertyPage() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28 }}>
         {/* ════════════════ LEFT COLUMN ════════════════ */}
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-          {/* Image upload */}
+          {/* ── Image upload ── */}
           <div style={card}>
             <Field
               label="Property Images"
               hint="First image will be the primary/cover image. Max 10 files, 5 MB each."
             >
-              {/* Drop zone */}
               <div
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={handleDrop}
@@ -309,7 +417,6 @@ export default function AddPropertyPage() {
                 />
               </div>
 
-              {/* Preview grid */}
               {imageFiles.length > 0 && (
                 <div
                   style={{
@@ -341,7 +448,6 @@ export default function AddPropertyPage() {
                           objectFit: "cover",
                         }}
                       />
-                      {/* Primary badge */}
                       {idx === 0 && (
                         <span
                           style={{
@@ -361,7 +467,6 @@ export default function AddPropertyPage() {
                           PRIMARY
                         </span>
                       )}
-                      {/* Remove button */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -386,7 +491,6 @@ export default function AddPropertyPage() {
                       </button>
                     </div>
                   ))}
-                  {/* Add more tile */}
                   {imageFiles.length < 10 && (
                     <div
                       onClick={() => fileInputRef.current?.click()}
@@ -409,19 +513,9 @@ export default function AddPropertyPage() {
             </Field>
           </div>
 
-          {/* Property details */}
+          {/* ── Property details ── */}
           <div style={card}>
-            <h3
-              style={{
-                fontFamily: "'Cormorant Garamond', serif",
-                fontSize: 18,
-                fontWeight: 700,
-                color: "#1a0f00",
-                marginBottom: 20,
-              }}
-            >
-              Property Details
-            </h3>
+            <SectionTitle>Property Details</SectionTitle>
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <Field label="Property Name *">
                 <Input
@@ -439,6 +533,8 @@ export default function AddPropertyPage() {
                   placeholder="e.g. Kiamiti Road, Nairobi"
                 />
               </Field>
+
+              {/* ── Pricing ── */}
               <div
                 style={{
                   display: "grid",
@@ -453,6 +549,7 @@ export default function AddPropertyPage() {
                     onChange={set("price")}
                     placeholder="24500000"
                     type="number"
+                    min="0"
                   />
                 </Field>
                 <Field label="Price Label" hint="e.g. Per month">
@@ -464,6 +561,106 @@ export default function AddPropertyPage() {
                   />
                 </Field>
               </div>
+
+              {/* ── Offer pricing ── */}
+              <div
+                style={{
+                  background: "#fdf6ee",
+                  border: "1.5px solid #f0e6d8",
+                  borderRadius: 14,
+                  padding: "16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                }}
+              >
+                <p
+                  style={{
+                    fontFamily: "'Jost', sans-serif",
+                    fontSize: 11,
+                    fontWeight: 500,
+                    color: "#b8a090",
+                    letterSpacing: "0.12em",
+                    textTransform: "uppercase",
+                    marginBottom: 2,
+                  }}
+                >
+                  Offer / Discount{" "}
+                  <span
+                    style={{
+                      fontWeight: 400,
+                      textTransform: "none",
+                      letterSpacing: 0,
+                      color: "#c8b09a",
+                    }}
+                  >
+                    — optional, pick one
+                  </span>
+                </p>
+
+                <Field
+                  label="Fixed Offer Price (KES)"
+                  hint="Overrides the base price display"
+                >
+                  <Input
+                    icon={DollarSign}
+                    value={form.offerPrice}
+                    onChange={(e) =>
+                      setOfferField("offerPrice", e.target.value)
+                    }
+                    placeholder="e.g. 22000000"
+                    type="number"
+                    min="0"
+                    disabled={!!form.discountPercent}
+                    style={
+                      form.discountPercent
+                        ? { opacity: 0.4, cursor: "not-allowed" }
+                        : {}
+                    }
+                  />
+                </Field>
+
+                <OrDivider />
+
+                <Field
+                  label="Discount (%)"
+                  hint="Auto-calculates the offer price"
+                >
+                  <Input
+                    icon={Percent}
+                    value={form.discountPercent}
+                    onChange={(e) =>
+                      setOfferField("discountPercent", e.target.value)
+                    }
+                    placeholder="e.g. 10"
+                    type="number"
+                    min="0"
+                    max="99"
+                    disabled={!!form.offerPrice}
+                    style={
+                      form.offerPrice
+                        ? { opacity: 0.4, cursor: "not-allowed" }
+                        : {}
+                    }
+                  />
+                </Field>
+
+                <Field label="Offer Expires">
+                  <Input
+                    icon={Calendar}
+                    value={form.offerExpiresAt}
+                    onChange={set("offerExpiresAt")}
+                    type="datetime-local"
+                    style={
+                      !form.offerPrice && !form.discountPercent
+                        ? { opacity: 0.5 }
+                        : {}
+                    }
+                  />
+                </Field>
+              </div>
+
+              {/* ── Beds / Baths / Area ── */}
               <div
                 style={{
                   display: "grid",
@@ -478,6 +675,7 @@ export default function AddPropertyPage() {
                     onChange={set("beds")}
                     placeholder="4"
                     type="number"
+                    min="0"
                   />
                 </Field>
                 <Field label="Baths">
@@ -487,6 +685,7 @@ export default function AddPropertyPage() {
                     onChange={set("baths")}
                     placeholder="3"
                     type="number"
+                    min="0"
                   />
                 </Field>
                 <Field label="Area m²">
@@ -496,6 +695,7 @@ export default function AddPropertyPage() {
                     onChange={set("area")}
                     placeholder="250"
                     type="number"
+                    min="0"
                   />
                 </Field>
               </div>
@@ -505,19 +705,9 @@ export default function AddPropertyPage() {
 
         {/* ════════════════ RIGHT COLUMN ════════════════ */}
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-          {/* Classification */}
+          {/* ── Classification ── */}
           <div style={card}>
-            <h3
-              style={{
-                fontFamily: "'Cormorant Garamond', serif",
-                fontSize: 18,
-                fontWeight: 700,
-                color: "#1a0f00",
-                marginBottom: 20,
-              }}
-            >
-              Classification
-            </h3>
+            <SectionTitle>Classification</SectionTitle>
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <Field label="Property Type *">
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -547,6 +737,7 @@ export default function AddPropertyPage() {
                   ))}
                 </div>
               </Field>
+
               <Field label="Badge">
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {BADGES.map((b) => (
@@ -577,19 +768,9 @@ export default function AddPropertyPage() {
             </div>
           </div>
 
-          {/* Description & Features */}
+          {/* ── Description & Features ── */}
           <div style={card}>
-            <h3
-              style={{
-                fontFamily: "'Cormorant Garamond', serif",
-                fontSize: 18,
-                fontWeight: 700,
-                color: "#1a0f00",
-                marginBottom: 20,
-              }}
-            >
-              Description & Features
-            </h3>
+            <SectionTitle>Description & Features</SectionTitle>
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <Field label="Description">
                 <textarea
@@ -617,7 +798,11 @@ export default function AddPropertyPage() {
                       e.key === "Enter" && (e.preventDefault(), addFeature())
                     }
                     placeholder="e.g. Swimming pool, BQ, Solar…"
-                    style={{ ...inputBase, fontSize: 12, padding: "10px 14px" }}
+                    style={{
+                      ...inputBase,
+                      fontSize: 12,
+                      padding: "10px 14px",
+                    }}
                     onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
                     onBlur={(e) => (e.target.style.borderColor = "#f0e6d8")}
                   />
@@ -678,9 +863,37 @@ export default function AddPropertyPage() {
             </div>
           </div>
 
-          {/* Submit */}
+          {/* ── Listing Options ── */}
+          <div style={card}>
+            <SectionTitle>Listing Options</SectionTitle>
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <Toggle
+                checked={form.isFeatured}
+                onChange={(val) => setField("isFeatured", val)}
+                label="Featured Listing"
+                hint="Pinned to the top of search results"
+              />
+
+              {/* featuredUntil only shown when isFeatured is on */}
+              {form.isFeatured && (
+                <Field
+                  label="Featured Until"
+                  hint="Leave blank to feature indefinitely"
+                >
+                  <Input
+                    icon={Calendar}
+                    value={form.featuredUntil}
+                    onChange={set("featuredUntil")}
+                    type="datetime-local"
+                  />
+                </Field>
+              )}
+            </div>
+          </div>
+
+          {/* ── Submit ── */}
           <button
-            onClick={handleSubmit}
+            onClick={submit}
             disabled={loading}
             style={{
               width: "100%",
@@ -724,7 +937,10 @@ export default function AddPropertyPage() {
                 Uploading & Saving…
               </>
             ) : (
-              "List Property"
+              <>
+                <Star size={15} strokeWidth={2} />
+                List Property
+              </>
             )}
             <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           </button>

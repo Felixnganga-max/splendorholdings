@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import Sidebar from "../components/Sidebar";
 import DashboardPage from "../components/DashboardPage";
-import OrdersPage from "../components/OrdersPage";
 import InquiriesPage from "../components/InquiriesPage";
 import AddPropertyPage from "../components/AddPropertyPage";
 import AnalyticsPage from "../components/AnalyticsPage";
@@ -21,7 +20,7 @@ if (!document.querySelector("#slendor-fonts")) {
 
 const pageMap = {
   dashboard: DashboardPage,
-  orders: OrdersPage,
+
   inquiries: InquiriesPage,
   "add-property": AddPropertyPage,
   properties: Properties,

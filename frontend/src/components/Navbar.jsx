@@ -1,29 +1,24 @@
 import { useState, useEffect, useRef } from "react";
 import { MapPin, Mail, Phone, Menu, X, ChevronDown } from "lucide-react";
 
-/* ── Fonts ── */
-if (!document.querySelector("#slendor-nav-fonts")) {
+if (!document.querySelector("#splendor-nav-fonts")) {
   const l = document.createElement("link");
-  l.id = "slendor-nav-fonts";
+  l.id = "splendor-nav-fonts";
   l.rel = "stylesheet";
   l.href =
-    "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Jost:wght@300;400;500;600&display=swap";
+    "https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Lato:wght@300;400;700&display=swap";
   document.head.appendChild(l);
 }
 
+const ROYAL = "#0A1172";
+const NAVY = "#1A3A5C";
+const GOLD = "#D4AF37";
+const CREAM = "#EDE8DC";
+const OFFWHITE = "#FAFAF8";
+const DARK = "#0D0D0D";
+
 const navLinks = [
-  {
-    label: "Properties",
-    href: "/listings",
-    children: [
-      { label: "All Listings", href: "/listings" },
-      { label: "Villas & Estates", href: "/listings" },
-      { label: "Apartments", href: "/listings" },
-      { label: "Townhouses", href: "/listings" },
-      { label: "Land & Plots", href: "/listings" },
-      { label: "Off-Plan Projects", href: "/listings" },
-    ],
-  },
+  { label: "Properties", href: "/listings" },
   { label: "Buy & Sell", href: "#" },
   { label: "Rentals", href: "#" },
   {
@@ -39,36 +34,33 @@ const navLinks = [
   { label: "Contact", href: "/contact-us" },
 ];
 
-/* ── Dropdown menu ── */
 function Dropdown({ items, visible }) {
   return (
     <div
       style={{
         position: "absolute",
-        top: "calc(100% + 12px)",
+        top: "calc(100% + 14px)",
         left: "50%",
-        transform: "translateX(-50%)",
-        background: "#fff",
-        borderRadius: 14,
-        boxShadow: "0 16px 56px rgba(0,0,0,0.13)",
-        border: "1px solid #f0e8df",
-        minWidth: 200,
+        transform: visible
+          ? "translateX(-50%) translateY(0)"
+          : "translateX(-50%) translateY(-10px)",
+        background: OFFWHITE,
+        borderRadius: 12,
+        boxShadow: "0 20px 60px rgba(10,17,114,0.14)",
+        border: `1px solid ${CREAM}`,
+        minWidth: 210,
         overflow: "hidden",
         opacity: visible ? 1 : 0,
         pointerEvents: visible ? "auto" : "none",
-        transform: visible
-          ? "translateX(-50%) translateY(0)"
-          : "translateX(-50%) translateY(-8px)",
         transition:
           "opacity 0.22s ease, transform 0.22s cubic-bezier(0.22,1,0.36,1)",
         zIndex: 100,
       }}
     >
-      {/* amber top line */}
       <div
         style={{
-          height: 2,
-          background: "linear-gradient(90deg,#F59E0B,#c2884a)",
+          height: 3,
+          background: `linear-gradient(90deg,${ROYAL},${GOLD})`,
         }}
       />
       {items.map((item, i) => (
@@ -78,23 +70,23 @@ function Dropdown({ items, visible }) {
           style={{
             display: "block",
             padding: "11px 20px",
-            fontFamily: "'Jost', sans-serif",
+            fontFamily: "'Lato', sans-serif",
             fontSize: 12.5,
             fontWeight: 400,
-            color: "#3d2c1a",
+            color: NAVY,
             textDecoration: "none",
-            borderBottom: i < items.length - 1 ? "1px solid #faf4ee" : "none",
-            transition: "background 0.18s, color 0.18s, padding 0.18s",
+            borderBottom: i < items.length - 1 ? `1px solid ${CREAM}` : "none",
+            transition: "background 0.18s, color 0.18s, padding-left 0.18s",
             letterSpacing: "0.03em",
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = "#fdf8f2";
-            e.currentTarget.style.color = "#c2884a";
-            e.currentTarget.style.paddingLeft = "26px";
+            e.currentTarget.style.background = CREAM;
+            e.currentTarget.style.color = ROYAL;
+            e.currentTarget.style.paddingLeft = "28px";
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.color = "#3d2c1a";
+            e.currentTarget.style.color = NAVY;
             e.currentTarget.style.paddingLeft = "20px";
           }}
         >
@@ -105,7 +97,6 @@ function Dropdown({ items, visible }) {
   );
 }
 
-/* ── Nav link with optional dropdown ── */
 function NavItem({ link, scrolled }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -118,7 +109,7 @@ function NavItem({ link, scrolled }) {
     return () => document.removeEventListener("mousedown", fn);
   }, []);
 
-  const color = scrolled ? "#3d2c1a" : "#1a0d00";
+  const textColor = scrolled ? NAVY : ROYAL;
 
   return (
     <div
@@ -133,34 +124,33 @@ function NavItem({ link, scrolled }) {
           display: "flex",
           alignItems: "center",
           gap: 4,
-          fontFamily: "'Jost', sans-serif",
-          fontSize: 12,
-          fontWeight: 500,
-          letterSpacing: "0.09em",
+          fontFamily: "'Lato', sans-serif",
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.11em",
           textTransform: "uppercase",
-          color: color,
+          color: textColor,
           textDecoration: "none",
           padding: "6px 2px",
           position: "relative",
           transition: "color 0.2s",
           whiteSpace: "nowrap",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.color = "#c2884a")}
-        onMouseLeave={(e) => (e.currentTarget.style.color = color)}
+        onMouseEnter={(e) => (e.currentTarget.style.color = GOLD)}
+        onMouseLeave={(e) => (e.currentTarget.style.color = textColor)}
       >
         {link.label}
         {link.children && (
           <ChevronDown
             size={11}
-            strokeWidth={2}
+            strokeWidth={2.5}
             style={{
               transform: open ? "rotate(180deg)" : "rotate(0deg)",
               transition: "transform 0.25s ease",
-              color: "#c2884a",
+              color: GOLD,
             }}
           />
         )}
-        {/* Underline hover effect */}
         <span
           style={{
             position: "absolute",
@@ -169,7 +159,7 @@ function NavItem({ link, scrolled }) {
             right: 0,
             height: 1.5,
             borderRadius: 2,
-            background: "linear-gradient(90deg,#F59E0B,#c2884a)",
+            background: GOLD,
             transform: open ? "scaleX(1)" : "scaleX(0)",
             transformOrigin: "left",
             transition: "transform 0.25s ease",
@@ -184,7 +174,7 @@ function NavItem({ link, scrolled }) {
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [openMobile, setOpenMobile] = useState(null); // index of open mobile accordion
+  const [openMobile, setOpenMobile] = useState(null);
 
   useEffect(() => {
     const fn = () => setScrolled(window.scrollY > 20);
@@ -193,7 +183,6 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", fn);
   }, []);
 
-  /* Lock body scroll when mobile menu open */
   useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";
     return () => {
@@ -204,42 +193,36 @@ export default function Navbar() {
   return (
     <>
       <style>{`
-        @keyframes slideDown {
-          from { opacity:0; transform:translateY(-12px); }
-          to   { opacity:1; transform:translateY(0); }
-        }
         @keyframes mobileSlideIn {
           from { opacity:0; transform:translateX(100%); }
           to   { opacity:1; transform:translateX(0); }
         }
-        .nav-topbar-link:hover { color: #F59E0B !important; }
+        .topbar-link:hover { color: ${GOLD} !important; }
+        @media (max-width: 1024px) {
+          .desktop-nav { display: none !important; }
+          .mobile-hamburger { display: flex !important; }
+        }
+        @media (max-width: 640px) {
+          .topbar-text { display: none; }
+        }
       `}</style>
 
       <header
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 9000,
-          width: "100%",
-          fontFamily: "'Jost', sans-serif",
-        }}
+        style={{ position: "sticky", top: 0, zIndex: 9000, width: "100%" }}
       >
-        {/* ══════════════════════
-            TOP INFO BAR
-        ══════════════════════ */}
+        {/* ── TOP INFO BAR ── */}
         <div
           style={{
-            background: scrolled ? "#0e0600" : "#111",
-            transition: "background 0.4s ease",
+            background: ROYAL,
             padding: "7px clamp(1rem,4vw,3rem)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             gap: 16,
             flexWrap: "wrap",
+            borderBottom: `1px solid rgba(212,175,55,0.2)`,
           }}
         >
-          {/* Contact info */}
           <div
             style={{
               display: "flex",
@@ -252,8 +235,8 @@ export default function Navbar() {
               { Icon: MapPin, text: "14 Riverside Drive, Westlands, Nairobi" },
               {
                 Icon: Mail,
-                text: "info@slendorholdings.com",
-                href: "mailto:info@slendorholdings.com",
+                text: "info@splendorholdings.com",
+                href: "mailto:info@splendorholdings.com",
               },
               {
                 Icon: Phone,
@@ -265,21 +248,21 @@ export default function Navbar() {
                 <a
                   key={i}
                   href={href}
-                  className="nav-topbar-link"
+                  className="topbar-link"
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: 7,
-                    fontFamily: "'Jost', sans-serif",
+                    fontFamily: "'Lato', sans-serif",
                     fontSize: 11.5,
-                    color: "rgba(255,235,200,0.72)",
+                    color: "rgba(237,232,220,0.80)",
                     textDecoration: "none",
                     fontWeight: 300,
                     letterSpacing: "0.03em",
                     transition: "color 0.2s",
                   }}
                 >
-                  <Icon size={12} strokeWidth={1.8} color="#F59E0B" />
+                  <Icon size={12} strokeWidth={1.8} color={GOLD} />
                   <span className="topbar-text">{text}</span>
                 </a>
               ) : (
@@ -290,65 +273,62 @@ export default function Navbar() {
                     alignItems: "center",
                     gap: 7,
                     fontSize: 11.5,
-                    color: "rgba(255,235,200,0.72)",
+                    fontFamily: "'Lato', sans-serif",
+                    color: "rgba(237,232,220,0.80)",
                     fontWeight: 300,
                     letterSpacing: "0.03em",
                   }}
                 >
-                  <Icon size={12} strokeWidth={1.8} color="#F59E0B" />
+                  <Icon size={12} strokeWidth={1.8} color={GOLD} />
                   <span className="topbar-text">{text}</span>
                 </span>
               ),
             )}
           </div>
 
-          {/* Right badges */}
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          {/* Open badge */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              background: "rgba(212,175,55,0.12)",
+              border: `1px solid rgba(212,175,55,0.30)`,
+              borderRadius: 99,
+              padding: "3px 12px",
+            }}
+          >
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                background: "rgba(245,158,11,0.10)",
-                border: "1px solid rgba(245,158,11,0.22)",
-                borderRadius: 99,
-                padding: "3px 12px",
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "#22c55e",
+                boxShadow: "0 0 0 2px rgba(34,197,94,0.25)",
+              }}
+            />
+            <span
+              style={{
+                fontFamily: "'Lato'",
+                fontSize: 10.5,
+                color: "rgba(237,232,220,0.80)",
+                letterSpacing: "0.08em",
               }}
             >
-              <div
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: "#22c55e",
-                  boxShadow: "0 0 0 2px rgba(34,197,94,0.25)",
-                }}
-              />
-              <span
-                style={{
-                  fontFamily: "'Jost'",
-                  fontSize: 10.5,
-                  color: "rgba(255,235,200,0.75)",
-                  letterSpacing: "0.08em",
-                }}
-              >
-                Open Today · 8AM – 6PM
-              </span>
-            </div>
+              Open Today · 8AM – 6PM
+            </span>
           </div>
         </div>
 
-        {/* ══════════════════════
-            MAIN NAV BAR
-        ══════════════════════ */}
+        {/* ── MAIN NAV BAR ── */}
         <div
           style={{
-            background: scrolled ? "rgba(255,252,248,0.97)" : "#fff",
+            background: scrolled ? `rgba(250,250,248,0.97)` : OFFWHITE,
             backdropFilter: scrolled ? "blur(12px)" : "none",
-            borderBottom: scrolled ? "1px solid #f0e5d8" : "1px solid #f5ede6",
+            borderBottom: `1px solid ${CREAM}`,
             boxShadow: scrolled
-              ? "0 4px 32px rgba(0,0,0,0.08)"
-              : "0 1px 0 rgba(0,0,0,0.04)",
+              ? `0 4px 32px rgba(10,17,114,0.08)`
+              : `0 1px 0 rgba(10,17,114,0.04)`,
             transition: "all 0.35s ease",
           }}
         >
@@ -363,21 +343,21 @@ export default function Navbar() {
               height: 72,
             }}
           >
-            {/* ── LEFT NAV (desktop) ── */}
+            {/* LEFT NAV */}
             <nav
+              className="desktop-nav"
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: "clamp(16px,2.5vw,36px)",
               }}
-              className="desktop-nav"
             >
               {navLinks.slice(0, 3).map((link, i) => (
                 <NavItem key={i} link={link} scrolled={scrolled} />
               ))}
             </nav>
 
-            {/* ── CENTER LOGO ── */}
+            {/* CENTER LOGO */}
             <a
               href="/"
               style={{
@@ -390,125 +370,132 @@ export default function Navbar() {
                 padding: "0 clamp(8px,2vw,32px)",
               }}
             >
-              {/* SVG skyline mark */}
+              {/* Royal crown SVG mark */}
               <svg
                 width="38"
-                height="42"
-                viewBox="0 0 48 52"
+                height="36"
+                viewBox="0 0 48 44"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
                 style={{ marginBottom: 5 }}
               >
-                <rect x="20" y="6" width="8" height="44" fill="#1a0d00" />
+                {/* Base building */}
+                <rect x="19" y="12" width="10" height="30" fill={ROYAL} />
                 <rect
-                  x="10"
-                  y="16"
+                  x="9"
+                  y="20"
                   width="10"
-                  height="34"
-                  fill="#1a0d00"
-                  opacity="0.70"
+                  height="22"
+                  fill={ROYAL}
+                  opacity="0.65"
                 />
                 <rect
-                  x="28"
-                  y="16"
+                  x="29"
+                  y="20"
                   width="10"
-                  height="34"
-                  fill="#1a0d00"
-                  opacity="0.70"
+                  height="22"
+                  fill={ROYAL}
+                  opacity="0.65"
                 />
                 <rect
-                  x="3"
-                  y="26"
+                  x="2"
+                  y="28"
                   width="7"
-                  height="24"
-                  fill="#1a0d00"
-                  opacity="0.38"
+                  height="14"
+                  fill={ROYAL}
+                  opacity="0.30"
                 />
                 <rect
-                  x="38"
-                  y="26"
+                  x="39"
+                  y="28"
                   width="7"
-                  height="24"
-                  fill="#1a0d00"
-                  opacity="0.38"
+                  height="14"
+                  fill={ROYAL}
+                  opacity="0.30"
                 />
-                <rect x="23" y="0" width="2" height="8" fill="#c2884a" />
-                {/* Amber spire tip */}
+                {/* Gold spire */}
+                <rect x="23" y="0" width="2" height="14" fill={GOLD} />
+                <polygon points="24,0 21,8 27,8" fill={GOLD} />
+                {/* Gold accent band */}
                 <rect
-                  x="20"
-                  y="6"
-                  width="8"
-                  height="3"
-                  fill="#c2884a"
-                  opacity="0.5"
+                  x="19"
+                  y="12"
+                  width="10"
+                  height="2.5"
+                  fill={GOLD}
+                  opacity="0.6"
                 />
               </svg>
 
               <span
                 style={{
-                  fontFamily: "'Cormorant Garamond', serif",
-                  fontSize: "clamp(13px,1.4vw,16px)",
+                  fontFamily: "'Playfair Display', serif",
+                  fontSize: "clamp(13px,1.4vw,15px)",
                   fontWeight: 700,
-                  letterSpacing: "0.22em",
+                  letterSpacing: "0.20em",
                   textTransform: "uppercase",
-                  color: "#1a0d00",
+                  color: ROYAL,
                   lineHeight: 1,
                   whiteSpace: "nowrap",
                 }}
               >
-                Slendor Holdings
+                Splendor Holdings
               </span>
               <span
                 style={{
-                  fontFamily: "'Jost', sans-serif",
+                  fontFamily: "'Lato', sans-serif",
                   fontSize: 8,
-                  letterSpacing: "0.30em",
+                  letterSpacing: "0.28em",
                   textTransform: "uppercase",
-                  color: "#c2884a",
-                  marginTop: 3,
+                  color: GOLD,
+                  marginTop: 4,
                   whiteSpace: "nowrap",
+                  fontWeight: 700,
                 }}
               >
                 — Real Estate & Investments —
               </span>
             </a>
 
-            {/* ── RIGHT NAV (desktop) ── */}
+            {/* RIGHT NAV */}
             <nav
+              className="desktop-nav"
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: "clamp(16px,2.5vw,36px)",
               }}
-              className="desktop-nav"
             >
               {navLinks.slice(3).map((link, i) => (
                 <NavItem key={i} link={link} scrolled={scrolled} />
               ))}
-              {/* CTA button */}
+              {/* CTA */}
               <a
                 href="/authentication"
                 style={{
-                  fontFamily: "'Jost', sans-serif",
+                  fontFamily: "'Lato', sans-serif",
                   fontSize: 11,
-                  fontWeight: 600,
+                  fontWeight: 700,
                   letterSpacing: "0.12em",
                   textTransform: "uppercase",
-                  background: "linear-gradient(135deg,#c2884a,#7B2D8B)",
-                  color: "#fff",
+                  background: ROYAL,
+                  color: GOLD,
                   textDecoration: "none",
-                  padding: "9px 20px",
+                  padding: "9px 22px",
                   borderRadius: 99,
+                  border: `1.5px solid ${GOLD}`,
                   whiteSpace: "nowrap",
-                  boxShadow: "0 4px 16px rgba(194,136,74,0.25)",
+                  boxShadow: `0 4px 16px rgba(10,17,114,0.18)`,
                   transition: "all 0.25s",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.filter = "brightness(1.10)";
+                  e.currentTarget.style.background = GOLD;
+                  e.currentTarget.style.color = ROYAL;
                   e.currentTarget.style.transform = "scale(1.03)";
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.filter = "brightness(1)";
+                  e.currentTarget.style.background = ROYAL;
+                  e.currentTarget.style.color = GOLD;
                   e.currentTarget.style.transform = "scale(1)";
                 }}
               >
@@ -516,7 +503,7 @@ export default function Navbar() {
               </a>
             </nav>
 
-            {/* ── HAMBURGER (mobile) ── */}
+            {/* HAMBURGER */}
             <button
               onClick={() => setMenuOpen((o) => !o)}
               className="mobile-hamburger"
@@ -527,7 +514,7 @@ export default function Navbar() {
                 border: "none",
                 cursor: "pointer",
                 padding: 6,
-                color: "#1a0d00",
+                color: ROYAL,
                 borderRadius: 8,
                 transition: "background 0.2s",
               }}
@@ -541,29 +528,18 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* ══════════════════════════════
-            MOBILE MENU — slide in from right
-        ══════════════════════════════ */}
+        {/* ── MOBILE MENU ── */}
         {menuOpen && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 8999,
-            }}
-          >
-            {/* Backdrop */}
+          <div style={{ position: "fixed", inset: 0, zIndex: 8999 }}>
             <div
               onClick={() => setMenuOpen(false)}
               style={{
                 position: "absolute",
                 inset: 0,
-                background: "rgba(10,4,0,0.55)",
+                background: "rgba(10,17,114,0.55)",
                 backdropFilter: "blur(3px)",
               }}
             />
-
-            {/* Panel */}
             <div
               style={{
                 position: "absolute",
@@ -571,8 +547,8 @@ export default function Navbar() {
                 right: 0,
                 bottom: 0,
                 width: "min(340px, 88vw)",
-                background: "#fdf8f2",
-                boxShadow: "-8px 0 48px rgba(0,0,0,0.18)",
+                background: OFFWHITE,
+                boxShadow: "-8px 0 48px rgba(10,17,114,0.18)",
                 display: "flex",
                 flexDirection: "column",
                 animation:
@@ -587,30 +563,32 @@ export default function Navbar() {
                   alignItems: "center",
                   justifyContent: "space-between",
                   padding: "20px 22px 16px",
-                  borderBottom: "1px solid #f0e5d8",
+                  borderBottom: `1px solid ${CREAM}`,
+                  background: ROYAL,
                 }}
               >
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   <span
                     style={{
-                      fontFamily: "'Cormorant Garamond', serif",
-                      fontSize: 18,
+                      fontFamily: "'Playfair Display', serif",
+                      fontSize: 17,
                       fontWeight: 700,
-                      color: "#1a0d00",
-                      letterSpacing: "0.15em",
+                      color: OFFWHITE,
+                      letterSpacing: "0.14em",
                       textTransform: "uppercase",
                     }}
                   >
-                    Slendor Holdings
+                    Splendor Holdings
                   </span>
                   <span
                     style={{
-                      fontFamily: "'Jost'",
+                      fontFamily: "'Lato'",
                       fontSize: 9,
-                      color: "#c2884a",
+                      color: GOLD,
                       letterSpacing: "0.25em",
                       textTransform: "uppercase",
-                      marginTop: 2,
+                      marginTop: 3,
+                      fontWeight: 700,
                     }}
                   >
                     Real Estate & Investments
@@ -622,7 +600,7 @@ export default function Navbar() {
                     background: "none",
                     border: "none",
                     cursor: "pointer",
-                    color: "#9a7c5a",
+                    color: GOLD,
                     padding: 4,
                   }}
                 >
@@ -649,17 +627,17 @@ export default function Navbar() {
                             background: "none",
                             border: "none",
                             cursor: "pointer",
-                            fontFamily: "'Jost'",
-                            fontSize: 13,
-                            fontWeight: 500,
-                            letterSpacing: "0.08em",
+                            fontFamily: "'Lato'",
+                            fontSize: 12,
+                            fontWeight: 700,
+                            letterSpacing: "0.10em",
                             textTransform: "uppercase",
-                            color: "#1a0d00",
-                            borderBottom: "1px solid #f5ede6",
+                            color: ROYAL,
+                            borderBottom: `1px solid ${CREAM}`,
                             transition: "background 0.2s",
                           }}
                           onMouseEnter={(e) =>
-                            (e.currentTarget.style.background = "#faf3ec")
+                            (e.currentTarget.style.background = CREAM)
                           }
                           onMouseLeave={(e) =>
                             (e.currentTarget.style.background = "none")
@@ -668,8 +646,8 @@ export default function Navbar() {
                           {link.label}
                           <ChevronDown
                             size={14}
-                            strokeWidth={1.8}
-                            color="#c2884a"
+                            strokeWidth={2}
+                            color={GOLD}
                             style={{
                               transform:
                                 openMobile === i
@@ -679,7 +657,6 @@ export default function Navbar() {
                             }}
                           />
                         </button>
-                        {/* Accordion children */}
                         <div
                           style={{
                             maxHeight:
@@ -689,7 +666,7 @@ export default function Navbar() {
                             overflow: "hidden",
                             transition:
                               "max-height 0.35s cubic-bezier(0.4,0,0.2,1)",
-                            background: "#fffcf8",
+                            background: CREAM,
                           }}
                         >
                           {link.children.map((child, ci) => (
@@ -700,20 +677,20 @@ export default function Navbar() {
                               style={{
                                 display: "block",
                                 padding: "11px 36px",
-                                fontFamily: "'Jost'",
+                                fontFamily: "'Lato'",
                                 fontSize: 12.5,
-                                color: "#6b4e2a",
+                                color: NAVY,
                                 textDecoration: "none",
-                                borderBottom: "1px solid #f5ede6",
+                                borderBottom: `1px solid rgba(10,17,114,0.08)`,
                                 letterSpacing: "0.03em",
-                                transition: "color 0.2s, padding 0.2s",
+                                transition: "color 0.2s, padding-left 0.2s",
                               }}
                               onMouseEnter={(e) => {
-                                e.currentTarget.style.color = "#c2884a";
+                                e.currentTarget.style.color = ROYAL;
                                 e.currentTarget.style.paddingLeft = "44px";
                               }}
                               onMouseLeave={(e) => {
-                                e.currentTarget.style.color = "#6b4e2a";
+                                e.currentTarget.style.color = NAVY;
                                 e.currentTarget.style.paddingLeft = "36px";
                               }}
                             >
@@ -729,23 +706,23 @@ export default function Navbar() {
                         style={{
                           display: "block",
                           padding: "13px 22px",
-                          fontFamily: "'Jost'",
-                          fontSize: 13,
-                          fontWeight: 500,
-                          letterSpacing: "0.08em",
+                          fontFamily: "'Lato'",
+                          fontSize: 12,
+                          fontWeight: 700,
+                          letterSpacing: "0.10em",
                           textTransform: "uppercase",
-                          color: "#1a0d00",
+                          color: ROYAL,
                           textDecoration: "none",
-                          borderBottom: "1px solid #f5ede6",
+                          borderBottom: `1px solid ${CREAM}`,
                           transition: "background 0.2s, color 0.2s",
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "#faf3ec";
-                          e.currentTarget.style.color = "#c2884a";
+                          e.currentTarget.style.background = CREAM;
+                          e.currentTarget.style.color = GOLD;
                         }}
                         onMouseLeave={(e) => {
                           e.currentTarget.style.background = "none";
-                          e.currentTarget.style.color = "#1a0d00";
+                          e.currentTarget.style.color = ROYAL;
                         }}
                       >
                         {link.label}
@@ -759,7 +736,7 @@ export default function Navbar() {
               <div
                 style={{
                   padding: "20px 22px 32px",
-                  borderTop: "1px solid #f0e5d8",
+                  borderTop: `1px solid ${CREAM}`,
                 }}
               >
                 <a
@@ -768,30 +745,24 @@ export default function Navbar() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    background: "linear-gradient(135deg,#c2884a,#7B2D8B)",
-                    color: "#fff",
+                    background: ROYAL,
+                    color: GOLD,
                     textDecoration: "none",
                     borderRadius: 12,
+                    border: `1.5px solid ${GOLD}`,
                     padding: "14px 24px",
-                    fontFamily: "'Jost'",
+                    fontFamily: "'Lato'",
                     fontSize: 12,
-                    fontWeight: 600,
+                    fontWeight: 700,
                     letterSpacing: "0.12em",
                     textTransform: "uppercase",
-                    boxShadow: "0 6px 24px rgba(194,136,74,0.28)",
-                    marginBottom: 14,
+                    marginBottom: 16,
                   }}
                 >
                   View All Properties
                 </a>
-                {/* Contact strip */}
                 <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 10,
-                    marginTop: 6,
-                  }}
+                  style={{ display: "flex", flexDirection: "column", gap: 12 }}
                 >
                   {[
                     {
@@ -801,8 +772,8 @@ export default function Navbar() {
                     },
                     {
                       Icon: Mail,
-                      text: "info@slendorholdings.com",
-                      href: "mailto:info@slendorholdings.com",
+                      text: "info@splendorholdings.com",
+                      href: "mailto:info@splendorholdings.com",
                     },
                   ].map(({ Icon, text, href }, i) => (
                     <a
@@ -812,20 +783,18 @@ export default function Navbar() {
                         display: "flex",
                         alignItems: "center",
                         gap: 10,
-                        fontFamily: "'Jost'",
+                        fontFamily: "'Lato'",
                         fontSize: 12.5,
-                        color: "#7a5c3a",
+                        color: NAVY,
                         textDecoration: "none",
                         transition: "color 0.2s",
                       }}
                       onMouseEnter={(e) =>
-                        (e.currentTarget.style.color = "#c2884a")
+                        (e.currentTarget.style.color = ROYAL)
                       }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.color = "#7a5c3a")
-                      }
+                      onMouseLeave={(e) => (e.currentTarget.style.color = NAVY)}
                     >
-                      <Icon size={14} color="#c2884a" strokeWidth={1.8} />
+                      <Icon size={14} color={GOLD} strokeWidth={1.8} />
                       {text}
                     </a>
                   ))}
@@ -835,17 +804,6 @@ export default function Navbar() {
           </div>
         )}
       </header>
-
-      {/* ── Responsive show/hide styles ── */}
-      <style>{`
-        @media (max-width: 1024px) {
-          .desktop-nav { display: none !important; }
-          .mobile-hamburger { display: flex !important; }
-        }
-        @media (max-width: 640px) {
-          .topbar-text { display: none; }
-        }
-      `}</style>
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import {
   Search,
   SlidersHorizontal,
@@ -7,43 +7,40 @@ import {
   Trash2,
   Loader2,
   AlertCircle,
-  CheckCircle,
   X,
-  Upload,
   Home,
   MapPin,
-  DollarSign,
   Bed,
   Bath,
   Maximize2,
-  Tag,
   ChevronLeft,
   ChevronRight,
   Eye,
+  EyeOff,
   ImageOff,
+  Tag,
+  Star,
+  Percent,
+  DollarSign,
+  Calendar,
+  CheckCircle,
+  Upload,
+  ArrowLeft,
 } from "lucide-react";
 import { useManageProperties } from "../Hooks/useManageProperties";
 import { useNavigate } from "react-router-dom";
 
-const PROPERTY_TYPES = [
-  "Villa",
-  "Apartment",
-  "Townhouse",
-  "Maisonette",
-  "Land/Plot",
-  "Commercial",
-];
-const BADGES = ["Featured", "New Listing", "For Sale", "For Rent", "Off-Plan"];
-const STATUSES = ["active", "draft", "archived", "sold"];
+const STATUSES = ["active", "draft", "archived", "sold", "rented"];
 const SORTS = [
   { label: "Newest", value: "-createdAt" },
   { label: "Oldest", value: "createdAt" },
-  { label: "Price ↑", value: "price" },
-  { label: "Price ↓", value: "-price" },
+  { label: "Price ↑", value: "pricing.original" },
+  { label: "Price ↓", value: "-pricing.original" },
   { label: "Most viewed", value: "-viewCount" },
+  { label: "Featured", value: "-isFeatured -createdAt" },
 ];
 
-// ── Design tokens ────────────────────────────────────────────────────────────
+// ── Design tokens ─────────────────────────────────────────────────────────────
 const PURPLE = "#7B2D8B";
 const DPURPLE = "#4A1060";
 const CREAM = "#fdf8f3";
@@ -71,11 +68,12 @@ const card = {
   padding: 24,
 };
 
+// ── Shared primitives ─────────────────────────────────────────────────────────
 const Field = ({ label, children, hint }) => (
   <div>
     <label
       style={{
-        fontFamily: "'Jost', sans-serif",
+        fontFamily: "'Jost',sans-serif",
         fontSize: 11,
         fontWeight: 500,
         color: LABEL,
@@ -91,7 +89,7 @@ const Field = ({ label, children, hint }) => (
     {hint && (
       <p
         style={{
-          fontFamily: "'Jost', sans-serif",
+          fontFamily: "'Jost',sans-serif",
           fontSize: 11,
           color: "#c8b09a",
           marginTop: 5,
@@ -103,7 +101,21 @@ const Field = ({ label, children, hint }) => (
   </div>
 );
 
-const IconInput = ({ icon: Icon, ...props }) => (
+const editInputBase = {
+  width: "100%",
+  padding: "12px 14px",
+  borderRadius: 12,
+  border: `1.5px solid ${BORDER}`,
+  background: CREAM,
+  fontFamily: "'Jost', sans-serif",
+  fontSize: 13,
+  color: "#1a0f00",
+  outline: "none",
+  boxSizing: "border-box",
+  transition: "border 0.2s",
+};
+
+const Input = ({ icon: Icon, ...props }) => (
   <div style={{ position: "relative" }}>
     {Icon && (
       <Icon
@@ -121,7 +133,7 @@ const IconInput = ({ icon: Icon, ...props }) => (
     <input
       {...props}
       style={{
-        ...inputBase,
+        ...editInputBase,
         ...(Icon ? { paddingLeft: 38 } : {}),
         ...props.style,
       }}
@@ -137,6 +149,7 @@ const StatusPill = ({ status }) => {
     draft: { bg: "#fef3c7", color: "#92400e" },
     archived: { bg: "#f3f4f6", color: "#4b5563" },
     sold: { bg: "#ede9fe", color: "#5b21b6" },
+    rented: { bg: "#dbeafe", color: "#1e40af" },
   };
   const s = map[status] || map.draft;
   return (
@@ -146,7 +159,7 @@ const StatusPill = ({ status }) => {
         color: s.color,
         fontSize: 10,
         fontWeight: 600,
-        fontFamily: "'Jost', sans-serif",
+        fontFamily: "'Jost',sans-serif",
         padding: "3px 9px",
         borderRadius: 99,
         textTransform: "uppercase",
@@ -158,7 +171,40 @@ const StatusPill = ({ status }) => {
   );
 };
 
-// ── Overlay backdrop ─────────────────────────────────────────────────────────
+const IconBtn = ({ onClick, title, children, danger, active, activeColor }) => (
+  <button
+    onClick={onClick}
+    title={title}
+    style={{
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      border: `1.5px solid ${danger ? "#fca5a5" : BORDER}`,
+      background: active
+        ? activeColor || PURPLE + "18"
+        : danger
+          ? "#fff5f5"
+          : CREAM,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      transition: "all 0.15s",
+      flexShrink: 0,
+    }}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.borderColor = danger
+        ? "#dc2626"
+        : activeColor || PURPLE;
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.borderColor = danger ? "#fca5a5" : BORDER;
+    }}
+  >
+    {children}
+  </button>
+);
+
 const Backdrop = ({ children, onClose }) => (
   <div
     onClick={onClose}
@@ -183,12 +229,987 @@ const Backdrop = ({ children, onClose }) => (
   </div>
 );
 
+const Toggle = ({ checked, onChange, label, activeColor = PURPLE }) => (
+  <label
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      cursor: "pointer",
+    }}
+  >
+    <div
+      onClick={() => onChange(!checked)}
+      style={{
+        width: 40,
+        height: 22,
+        borderRadius: 99,
+        position: "relative",
+        background: checked ? activeColor : "#e5e7eb",
+        transition: "background 0.2s",
+        cursor: "pointer",
+        flexShrink: 0,
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          top: 3,
+          left: checked ? 21 : 3,
+          width: 16,
+          height: 16,
+          borderRadius: "50%",
+          background: "#fff",
+          transition: "left 0.2s",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+        }}
+      />
+    </div>
+    <span
+      style={{
+        fontFamily: "'Jost',sans-serif",
+        fontSize: 12,
+        color: checked ? "#1a0f00" : MUTED,
+        fontWeight: checked ? 500 : 400,
+      }}
+    >
+      {label}
+    </span>
+  </label>
+);
+
+const OrDivider = () => (
+  <div
+    style={{ display: "flex", alignItems: "center", gap: 10, margin: "2px 0" }}
+  >
+    <div style={{ flex: 1, height: 1, background: BORDER }} />
+    <span
+      style={{
+        fontFamily: "'Jost',sans-serif",
+        fontSize: 10,
+        color: "#c8b09a",
+        letterSpacing: "0.1em",
+        textTransform: "uppercase",
+      }}
+    >
+      or
+    </span>
+    <div style={{ flex: 1, height: 1, background: BORDER }} />
+  </div>
+);
+
+const SectionTitle = ({ children }) => (
+  <h3
+    style={{
+      fontFamily: "'Cormorant Garamond',serif",
+      fontSize: 18,
+      fontWeight: 700,
+      color: "#1a0f00",
+      marginBottom: 20,
+    }}
+  >
+    {children}
+  </h3>
+);
+
 // ════════════════════════════════════════════════════════════════════════════
-// MAIN PAGE
+// EDIT VIEW
+// ════════════════════════════════════════════════════════════════════════════
+function EditView({ onBack, hook }) {
+  const fileEditRef = useRef(null);
+
+  const {
+    editing,
+    editForm,
+    editImages,
+    editLoading,
+    editError,
+    editSuccess,
+    editPricingPreview,
+    featureInput,
+    setFeatureInput,
+    closeEdit,
+    setEditField,
+    setEditDirect,
+    addEditImages,
+    removeNewImage,
+    removeExistingImage,
+    addFeature,
+    removeFeature,
+    submitEdit,
+    propertyTypes,
+    badges,
+    formatKES,
+  } = hook;
+
+  if (!editing) return null;
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    addEditImages(e.dataTransfer.files);
+  };
+  const handleFileInput = (e) => {
+    addEditImages(e.target.files);
+    e.target.value = "";
+  };
+
+  const offerMode = editForm.offerMode || "none";
+
+  return (
+    <div style={{ padding: "36px 40px", maxWidth: 960, margin: "0 auto" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 32 }}>
+        <button
+          onClick={onBack}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            fontFamily: "'Jost',sans-serif",
+            fontSize: 12,
+            color: MUTED,
+            marginBottom: 16,
+            padding: 0,
+          }}
+        >
+          <ArrowLeft size={14} /> Back to properties
+        </button>
+        <p
+          style={{
+            fontFamily: "'Jost',sans-serif",
+            fontSize: 12,
+            color: "#b45309",
+            letterSpacing: "0.2em",
+            textTransform: "uppercase",
+            fontWeight: 500,
+            marginBottom: 6,
+          }}
+        >
+          Property Management
+        </p>
+        <h1
+          style={{
+            fontFamily: "'Cormorant Garamond',serif",
+            fontSize: "clamp(1.8rem,3vw,2.6rem)",
+            fontWeight: 700,
+            color: "#1a0f00",
+          }}
+        >
+          Edit: {editing.name}
+        </h1>
+      </div>
+
+      {/* Success */}
+      {editSuccess && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            background: "#d1fae5",
+            border: "1.5px solid #6ee7b7",
+            borderRadius: 14,
+            padding: "16px 20px",
+            marginBottom: 28,
+          }}
+        >
+          <CheckCircle size={18} color="#0d6e5e" />
+          <span
+            style={{
+              fontFamily: "'Jost',sans-serif",
+              fontSize: 13,
+              color: "#0d6e5e",
+              fontWeight: 500,
+            }}
+          >
+            Property updated successfully!
+          </span>
+        </div>
+      )}
+
+      {/* Error */}
+      {editError && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            background: "#fef2f2",
+            border: "1.5px solid #fca5a5",
+            borderRadius: 14,
+            padding: "16px 20px",
+            marginBottom: 28,
+          }}
+        >
+          <AlertCircle size={18} color="#dc2626" />
+          <span
+            style={{
+              fontFamily: "'Jost',sans-serif",
+              fontSize: 13,
+              color: "#dc2626",
+              fontWeight: 500,
+            }}
+          >
+            {editError}
+          </span>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28 }}>
+        {/* ── LEFT COLUMN ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+          {/* Images */}
+          <div style={card}>
+            <SectionTitle>Images</SectionTitle>
+
+            {/* Existing images */}
+            {editing.images?.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <p
+                  style={{
+                    fontFamily: "'Jost',sans-serif",
+                    fontSize: 11,
+                    color: LABEL,
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    marginBottom: 10,
+                  }}
+                >
+                  Current images
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(80px,1fr))",
+                    gap: 8,
+                  }}
+                >
+                  {editing.images.map((img, idx) => (
+                    <div
+                      key={img._id}
+                      style={{
+                        position: "relative",
+                        borderRadius: 10,
+                        overflow: "hidden",
+                        aspectRatio: "1",
+                        border:
+                          idx === 0
+                            ? `2px solid ${PURPLE}`
+                            : "2px solid transparent",
+                      }}
+                    >
+                      <img
+                        src={img.url}
+                        alt=""
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                        }}
+                      />
+                      {idx === 0 && (
+                        <span
+                          style={{
+                            position: "absolute",
+                            bottom: 4,
+                            left: 4,
+                            background: PURPLE,
+                            color: "#fff",
+                            fontSize: 9,
+                            fontWeight: 600,
+                            fontFamily: "'Jost',sans-serif",
+                            padding: "2px 6px",
+                            borderRadius: 99,
+                          }}
+                        >
+                          PRIMARY
+                        </span>
+                      )}
+                      <button
+                        onClick={() => removeExistingImage(img._id)}
+                        style={{
+                          position: "absolute",
+                          top: 4,
+                          right: 4,
+                          width: 20,
+                          height: 20,
+                          borderRadius: "50%",
+                          background: "rgba(220,38,38,0.85)",
+                          border: "none",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <X size={10} color="#fff" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Upload new images */}
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              onClick={() => fileEditRef.current?.click()}
+              style={{
+                border: "2px dashed #e8ddd2",
+                borderRadius: 14,
+                padding: "24px 20px",
+                textAlign: "center",
+                background: CREAM,
+                cursor: "pointer",
+                transition: "all 0.2s",
+                marginBottom: editImages.length ? 12 : 0,
+              }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.borderColor = "#c2884a")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.borderColor = "#e8ddd2")
+              }
+            >
+              <Upload
+                size={16}
+                color={PURPLE}
+                strokeWidth={1.8}
+                style={{ margin: "0 auto 8px", display: "block" }}
+              />
+              <p
+                style={{
+                  fontFamily: "'Jost',sans-serif",
+                  fontSize: 12,
+                  color: MUTED,
+                }}
+              >
+                Add more photos or{" "}
+                <span style={{ color: PURPLE, fontWeight: 600 }}>browse</span>
+              </p>
+              <input
+                ref={fileEditRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                style={{ display: "none" }}
+                onChange={handleFileInput}
+              />
+            </div>
+
+            {/* New image previews */}
+            {editImages.length > 0 && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(80px,1fr))",
+                  gap: 8,
+                }}
+              >
+                {editImages.map(({ preview }, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      position: "relative",
+                      borderRadius: 10,
+                      overflow: "hidden",
+                      aspectRatio: "1",
+                      border: "2px solid #6ee7b7",
+                    }}
+                  >
+                    <img
+                      src={preview}
+                      alt=""
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                      }}
+                    />
+                    <span
+                      style={{
+                        position: "absolute",
+                        bottom: 4,
+                        left: 4,
+                        background: "#059669",
+                        color: "#fff",
+                        fontSize: 9,
+                        fontWeight: 600,
+                        fontFamily: "'Jost',sans-serif",
+                        padding: "2px 6px",
+                        borderRadius: 99,
+                      }}
+                    >
+                      NEW
+                    </span>
+                    <button
+                      onClick={() => removeNewImage(idx)}
+                      style={{
+                        position: "absolute",
+                        top: 4,
+                        right: 4,
+                        width: 20,
+                        height: 20,
+                        borderRadius: "50%",
+                        background: "rgba(0,0,0,0.6)",
+                        border: "none",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <X size={10} color="#fff" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Core details */}
+          <div style={card}>
+            <SectionTitle>Property Details</SectionTitle>
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              <Field label="Property Name">
+                <Input
+                  icon={Home}
+                  value={editForm.name}
+                  onChange={setEditField("name")}
+                  placeholder="e.g. Amalia Springs"
+                />
+              </Field>
+              <Field label="Location">
+                <Input
+                  icon={MapPin}
+                  value={editForm.location}
+                  onChange={setEditField("location")}
+                  placeholder="e.g. Kiamiti Road, Nairobi"
+                />
+              </Field>
+
+              {/* Base price */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 12,
+                }}
+              >
+                <Field label="Price (KES)">
+                  <Input
+                    icon={DollarSign}
+                    value={editForm.price}
+                    onChange={setEditField("price")}
+                    type="number"
+                    min="0"
+                    placeholder="24500000"
+                  />
+                </Field>
+                <Field label="Price Label" hint="e.g. Per month">
+                  <Input
+                    icon={Tag}
+                    value={editForm.priceLabel}
+                    onChange={setEditField("priceLabel")}
+                    placeholder="Per month"
+                  />
+                </Field>
+              </div>
+
+              {/* Offer / Discount */}
+              <div
+                style={{
+                  background: "#fdf6ee",
+                  border: `1.5px solid ${BORDER}`,
+                  borderRadius: 14,
+                  padding: 16,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12,
+                }}
+              >
+                <p
+                  style={{
+                    fontFamily: "'Jost',sans-serif",
+                    fontSize: 11,
+                    fontWeight: 500,
+                    color: LABEL,
+                    letterSpacing: "0.12em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Offer / Discount{" "}
+                  <span
+                    style={{
+                      fontWeight: 400,
+                      textTransform: "none",
+                      letterSpacing: 0,
+                      color: "#c8b09a",
+                    }}
+                  >
+                    — pick one
+                  </span>
+                </p>
+
+                {/* Mode selector */}
+                <div style={{ display: "flex", gap: 6 }}>
+                  {["none", "percent", "fixed"].map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setEditDirect("offerMode", m)}
+                      style={{
+                        fontFamily: "'Jost',sans-serif",
+                        fontSize: 11,
+                        fontWeight: offerMode === m ? 600 : 400,
+                        padding: "6px 14px",
+                        borderRadius: 99,
+                        border:
+                          offerMode === m ? "none" : `1.5px solid ${BORDER}`,
+                        background:
+                          offerMode === m
+                            ? m === "none"
+                              ? "#6b7280"
+                              : `linear-gradient(135deg,${PURPLE},${DPURPLE})`
+                            : CREAM,
+                        color: offerMode === m ? "#fff" : MUTED,
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      {m === "none"
+                        ? "No offer"
+                        : m === "percent"
+                          ? "% Discount"
+                          : "Fixed price"}
+                    </button>
+                  ))}
+                </div>
+
+                {offerMode === "percent" && (
+                  <Field label="Discount (%)" hint="0–99">
+                    <Input
+                      icon={Percent}
+                      value={editForm.discountPercent}
+                      onChange={setEditField("discountPercent")}
+                      type="number"
+                      min="0"
+                      max="99"
+                      placeholder="e.g. 10"
+                    />
+                  </Field>
+                )}
+
+                {offerMode === "fixed" && (
+                  <Field label="Fixed Offer Price (KES)">
+                    <Input
+                      icon={DollarSign}
+                      value={editForm.offerPrice}
+                      onChange={setEditField("offerPrice")}
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 22000000"
+                    />
+                  </Field>
+                )}
+
+                {offerMode !== "none" && (
+                  <Field label="Offer Expires">
+                    <Input
+                      icon={Calendar}
+                      value={editForm.offerExpiresAt}
+                      onChange={setEditField("offerExpiresAt")}
+                      type="date"
+                    />
+                  </Field>
+                )}
+
+                {/* Live pricing preview */}
+                {editPricingPreview &&
+                  offerMode !== "none" &&
+                  editPricingPreview.savings > 0 && (
+                    <div
+                      style={{
+                        background: "#fff",
+                        borderRadius: 10,
+                        padding: "10px 14px",
+                        border: `1.5px solid #6ee7b7`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: "'Jost',sans-serif",
+                          fontSize: 12,
+                          color: MUTED,
+                        }}
+                      >
+                        Effective price
+                      </span>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "baseline",
+                          gap: 8,
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontFamily: "'Jost',sans-serif",
+                            fontSize: 14,
+                            fontWeight: 700,
+                            color: "#059669",
+                          }}
+                        >
+                          {formatKES(editPricingPreview.effective)}
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: "'Jost',sans-serif",
+                            fontSize: 11,
+                            color: "#dc2626",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {editPricingPreview.savingsPct}% off
+                        </span>
+                      </div>
+                    </div>
+                  )}
+              </div>
+
+              {/* Beds / Baths / Area */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr 1fr",
+                  gap: 12,
+                }}
+              >
+                <Field label="Beds">
+                  <Input
+                    icon={Bed}
+                    value={editForm.beds}
+                    onChange={setEditField("beds")}
+                    type="number"
+                    min="0"
+                    placeholder="4"
+                  />
+                </Field>
+                <Field label="Baths">
+                  <Input
+                    icon={Bed}
+                    value={editForm.baths}
+                    onChange={setEditField("baths")}
+                    type="number"
+                    min="0"
+                    placeholder="3"
+                  />
+                </Field>
+                <Field label="Area m²">
+                  <Input
+                    icon={Maximize2}
+                    value={editForm.area}
+                    onChange={setEditField("area")}
+                    type="number"
+                    min="0"
+                    placeholder="250"
+                  />
+                </Field>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── RIGHT COLUMN ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+          {/* Classification */}
+          <div style={card}>
+            <SectionTitle>Classification</SectionTitle>
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              <Field label="Property Type">
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {propertyTypes.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setEditDirect("type", t)}
+                      style={{
+                        fontFamily: "'Jost',sans-serif",
+                        fontSize: 12,
+                        fontWeight: editForm.type === t ? 600 : 400,
+                        padding: "8px 14px",
+                        borderRadius: 99,
+                        border:
+                          editForm.type === t
+                            ? "none"
+                            : `1.5px solid ${BORDER}`,
+                        background:
+                          editForm.type === t
+                            ? `linear-gradient(135deg,${PURPLE},${DPURPLE})`
+                            : CREAM,
+                        color: editForm.type === t ? "#fff" : MUTED,
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="Badge">
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {badges.map((b) => (
+                    <button
+                      key={b}
+                      onClick={() =>
+                        setEditDirect("badge", editForm.badge === b ? "" : b)
+                      }
+                      style={{
+                        fontFamily: "'Jost',sans-serif",
+                        fontSize: 12,
+                        fontWeight: editForm.badge === b ? 600 : 400,
+                        padding: "8px 14px",
+                        borderRadius: 99,
+                        border:
+                          editForm.badge === b
+                            ? "none"
+                            : `1.5px solid ${BORDER}`,
+                        background: editForm.badge === b ? "#b45309" : CREAM,
+                        color: editForm.badge === b ? "#fff" : MUTED,
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      {b}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="Status">
+                <select
+                  value={editForm.status}
+                  onChange={setEditField("status")}
+                  style={{
+                    ...editInputBase,
+                    paddingRight: 32,
+                    cursor: "pointer",
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
+                  onBlur={(e) => (e.target.style.borderColor = BORDER)}
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          </div>
+
+          {/* Description & Features */}
+          <div style={card}>
+            <SectionTitle>Description & Features</SectionTitle>
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              <Field label="Description">
+                <textarea
+                  value={editForm.description}
+                  onChange={setEditField("description")}
+                  rows={4}
+                  placeholder="Describe the property…"
+                  style={{
+                    ...editInputBase,
+                    resize: "vertical",
+                    lineHeight: 1.7,
+                  }}
+                  onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
+                  onBlur={(e) => (e.target.style.borderColor = BORDER)}
+                />
+              </Field>
+
+              <Field label="Key Features" hint="Press Enter or click + to add">
+                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                  <input
+                    value={featureInput}
+                    onChange={(e) => setFeatureInput(e.target.value)}
+                    onKeyDown={(e) =>
+                      e.key === "Enter" && (e.preventDefault(), addFeature())
+                    }
+                    placeholder="e.g. Swimming pool, BQ, Solar…"
+                    style={{
+                      ...editInputBase,
+                      fontSize: 12,
+                      padding: "10px 14px",
+                    }}
+                    onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
+                    onBlur={(e) => (e.target.style.borderColor = BORDER)}
+                  />
+                  <button
+                    onClick={addFeature}
+                    style={{
+                      width: 38,
+                      height: 38,
+                      borderRadius: 10,
+                      border: "none",
+                      background: `linear-gradient(135deg,${PURPLE},${DPURPLE})`,
+                      color: "#fff",
+                      cursor: "pointer",
+                      flexShrink: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Plus size={15} />
+                  </button>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {(editForm.features || []).map((f, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 5,
+                        background: "#f3e8ff",
+                        color: PURPLE,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        padding: "4px 10px",
+                        borderRadius: 99,
+                        fontFamily: "'Jost',sans-serif",
+                      }}
+                    >
+                      {f}
+                      <button
+                        onClick={() => removeFeature(i)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: 0,
+                          display: "flex",
+                          alignItems: "center",
+                        }}
+                      >
+                        <X size={10} color={PURPLE} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </Field>
+            </div>
+          </div>
+
+          {/* Listing options */}
+          <div style={card}>
+            <SectionTitle>Listing Options</SectionTitle>
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              <Toggle
+                checked={editForm.isVisible}
+                onChange={(v) => setEditDirect("isVisible", v)}
+                label="Visible to public"
+                activeColor={PURPLE}
+              />
+              <Toggle
+                checked={editForm.isSoldOut}
+                onChange={(v) => setEditDirect("isSoldOut", v)}
+                label="Mark as sold out"
+                activeColor="#6b7280"
+              />
+              <Toggle
+                checked={editForm.isFeatured}
+                onChange={(v) => setEditDirect("isFeatured", v)}
+                label="Featured listing"
+                activeColor="#F59E0B"
+              />
+              {editForm.isFeatured && (
+                <Field label="Featured Until" hint="Leave blank for indefinite">
+                  <Input
+                    icon={Calendar}
+                    value={editForm.featuredUntil}
+                    onChange={setEditField("featuredUntil")}
+                    type="date"
+                  />
+                </Field>
+              )}
+            </div>
+          </div>
+
+          {/* Save button */}
+          <button
+            onClick={submitEdit}
+            disabled={editLoading}
+            style={{
+              width: "100%",
+              padding: "16px",
+              borderRadius: 14,
+              border: "none",
+              background: editLoading
+                ? "#9ca3af"
+                : `linear-gradient(135deg,${PURPLE},${DPURPLE})`,
+              color: "#fff",
+              fontFamily: "'Jost',sans-serif",
+              fontSize: 14,
+              fontWeight: 600,
+              letterSpacing: "0.08em",
+              textTransform: "uppercase",
+              cursor: editLoading ? "not-allowed" : "pointer",
+              boxShadow: editLoading
+                ? "none"
+                : "0 8px 28px rgba(123,45,139,0.3)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+              transition: "filter 0.2s, transform 0.2s",
+            }}
+            onMouseEnter={(e) => {
+              if (!editLoading) {
+                e.currentTarget.style.filter = "brightness(1.1)";
+                e.currentTarget.style.transform = "translateY(-2px)";
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.filter = "brightness(1)";
+              e.currentTarget.style.transform = "translateY(0)";
+            }}
+          >
+            {editLoading ? (
+              <>
+                <Loader2
+                  size={16}
+                  style={{ animation: "spin 0.8s linear infinite" }}
+                />{" "}
+                Saving…
+              </>
+            ) : (
+              "Save Changes"
+            )}
+          </button>
+        </div>
+      </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════════════════
 export default function Properties() {
   const navigate = useNavigate();
-  const fileEditRef = useRef(null);
+  const [view, setView] = useState("list"); // "list" | "edit"
+
+  const hook = useManageProperties();
 
   const {
     properties,
@@ -201,41 +1222,40 @@ export default function Properties() {
     listLoading,
     listError,
     fetchProperties,
-    editing,
-    editForm,
-    editImages,
-    editLoading,
-    editError,
-    editSuccess,
-    featureInput,
-    setFeatureInput,
+    propertyTypes,
+    badges,
+    categoriesLoading,
+    toggleVisibility,
+    toggleSoldOut,
     openEdit,
-    closeEdit,
-    setEditField,
-    setEditDirect,
-    addEditImages,
-    removeNewImage,
-    removeExistingImage,
-    addFeature,
-    removeFeature,
-    submitEdit,
     deleting,
     deleteLoading,
     deleteError,
     openDelete,
     closeDelete,
     confirmDelete,
-  } = useManageProperties();
+    formatKES,
+  } = hook;
 
-  const fmt = (n) =>
-    new Intl.NumberFormat("en-KE", {
-      notation: "compact",
-      maximumFractionDigits: 1,
-    }).format(n);
+  const handleOpenEdit = (property) => {
+    openEdit(property);
+    setView("edit");
+  };
 
+  const handleBack = () => {
+    hook.closeEdit();
+    setView("list");
+  };
+
+  // ── Edit view ──────────────────────────────────────────────────────────────
+  if (view === "edit") {
+    return <EditView onBack={handleBack} hook={hook} />;
+  }
+
+  // ── List view ──────────────────────────────────────────────────────────────
   return (
     <div style={{ padding: "36px 40px", maxWidth: 1100, margin: "0 auto" }}>
-      {/* ── Header ── */}
+      {/* Header */}
       <div
         style={{
           display: "flex",
@@ -247,7 +1267,7 @@ export default function Properties() {
         <div>
           <p
             style={{
-              fontFamily: "'Jost', sans-serif",
+              fontFamily: "'Jost',sans-serif",
               fontSize: 12,
               color: "#b45309",
               letterSpacing: "0.2em",
@@ -260,7 +1280,7 @@ export default function Properties() {
           </p>
           <h1
             style={{
-              fontFamily: "'Cormorant Garamond', serif",
+              fontFamily: "'Cormorant Garamond',serif",
               fontSize: "clamp(1.8rem,3vw,2.6rem)",
               fontWeight: 700,
               color: "#1a0f00",
@@ -280,7 +1300,7 @@ export default function Properties() {
             border: "none",
             background: `linear-gradient(135deg,${PURPLE},${DPURPLE})`,
             color: "#fff",
-            fontFamily: "'Jost', sans-serif",
+            fontFamily: "'Jost',sans-serif",
             fontSize: 13,
             fontWeight: 600,
             cursor: "pointer",
@@ -291,12 +1311,12 @@ export default function Properties() {
         </button>
       </div>
 
-      {/* ── Filters bar ── */}
+      {/* Filters */}
       <div style={{ ...card, marginBottom: 24, padding: "18px 24px" }}>
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1fr auto auto auto auto",
+            gridTemplateColumns: "1fr auto auto auto auto auto",
             gap: 12,
             alignItems: "center",
           }}
@@ -335,7 +1355,7 @@ export default function Properties() {
             }}
           >
             <option value="">All types</option>
-            {PROPERTY_TYPES.map((t) => (
+            {propertyTypes.map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>
@@ -376,6 +1396,65 @@ export default function Properties() {
               </option>
             ))}
           </select>
+          {/* Quick filters */}
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              onClick={() =>
+                setFilter(
+                  "isFeatured",
+                  filters.isFeatured === "true" ? "" : "true",
+                )
+              }
+              title="Featured only"
+              style={{
+                padding: "8px 12px",
+                borderRadius: 10,
+                border: `1.5px solid ${filters.isFeatured === "true" ? PURPLE : BORDER}`,
+                background:
+                  filters.isFeatured === "true" ? PURPLE + "18" : CREAM,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                fontFamily: "'Jost',sans-serif",
+                fontSize: 11,
+                color: filters.isFeatured === "true" ? PURPLE : MUTED,
+                fontWeight: filters.isFeatured === "true" ? 600 : 400,
+              }}
+            >
+              <Star
+                size={12}
+                fill={filters.isFeatured === "true" ? PURPLE : "none"}
+                color={filters.isFeatured === "true" ? PURPLE : MUTED}
+              />{" "}
+              Featured
+            </button>
+            <button
+              onClick={() =>
+                setFilter(
+                  "isSoldOut",
+                  filters.isSoldOut === "true" ? "" : "true",
+                )
+              }
+              title="Sold out only"
+              style={{
+                padding: "8px 12px",
+                borderRadius: 10,
+                border: `1.5px solid ${filters.isSoldOut === "true" ? "#6b7280" : BORDER}`,
+                background: filters.isSoldOut === "true" ? "#6b728018" : CREAM,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                fontFamily: "'Jost',sans-serif",
+                fontSize: 11,
+                color: filters.isSoldOut === "true" ? "#374151" : MUTED,
+                fontWeight: filters.isSoldOut === "true" ? 600 : 400,
+              }}
+            >
+              <Tag size={12} /> Sold Out
+            </button>
+          </div>
           {/* Refresh */}
           <button
             onClick={fetchProperties}
@@ -388,7 +1467,7 @@ export default function Properties() {
               display: "flex",
               alignItems: "center",
               gap: 6,
-              fontFamily: "'Jost', sans-serif",
+              fontFamily: "'Jost',sans-serif",
               fontSize: 12,
               color: MUTED,
             }}
@@ -398,7 +1477,7 @@ export default function Properties() {
         </div>
         <p
           style={{
-            fontFamily: "'Jost', sans-serif",
+            fontFamily: "'Jost',sans-serif",
             fontSize: 11,
             color: LABEL,
             marginTop: 12,
@@ -408,7 +1487,7 @@ export default function Properties() {
         </p>
       </div>
 
-      {/* ── List error ── */}
+      {/* List error */}
       {listError && (
         <div
           style={{
@@ -425,7 +1504,7 @@ export default function Properties() {
           <AlertCircle size={16} color="#dc2626" />
           <span
             style={{
-              fontFamily: "'Jost', sans-serif",
+              fontFamily: "'Jost',sans-serif",
               fontSize: 13,
               color: "#dc2626",
             }}
@@ -435,7 +1514,7 @@ export default function Properties() {
         </div>
       )}
 
-      {/* ── Loading ── */}
+      {/* Loading */}
       {listLoading && (
         <div
           style={{
@@ -449,11 +1528,10 @@ export default function Properties() {
             color={PURPLE}
             style={{ animation: "spin 0.8s linear infinite" }}
           />
-          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         </div>
       )}
 
-      {/* ── Empty state ── */}
+      {/* Empty */}
       {!listLoading && properties.length === 0 && !listError && (
         <div style={{ textAlign: "center", padding: "80px 20px" }}>
           <div
@@ -472,7 +1550,7 @@ export default function Properties() {
           </div>
           <p
             style={{
-              fontFamily: "'Cormorant Garamond', serif",
+              fontFamily: "'Cormorant Garamond',serif",
               fontSize: 22,
               fontWeight: 700,
               color: "#1a0f00",
@@ -483,7 +1561,7 @@ export default function Properties() {
           </p>
           <p
             style={{
-              fontFamily: "'Jost', sans-serif",
+              fontFamily: "'Jost',sans-serif",
               fontSize: 13,
               color: MUTED,
             }}
@@ -493,18 +1571,24 @@ export default function Properties() {
         </div>
       )}
 
-      {/* ── Property grid ── */}
+      {/* Property grid */}
       {!listLoading && properties.length > 0 && (
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))",
             gap: 20,
             marginBottom: 28,
           }}
         >
           {properties.map((p) => {
             const img = p.primaryImage || p.images?.[0]?.url;
+            const pricing = p.pricing || {};
+            const hasOffer = pricing.hasActiveOffer;
+            const effective =
+              pricing.effectivePrice ?? pricing.original ?? p.price;
+            const savings = pricing.savingsPercent;
+
             return (
               <div
                 key={p._id}
@@ -513,6 +1597,7 @@ export default function Properties() {
                   padding: 0,
                   overflow: "hidden",
                   transition: "box-shadow 0.2s",
+                  opacity: p.isVisible ? 1 : 0.65,
                 }}
                 onMouseEnter={(e) =>
                   (e.currentTarget.style.boxShadow =
@@ -551,8 +1636,60 @@ export default function Properties() {
                       <ImageOff size={28} color="#d4b8a0" strokeWidth={1.3} />
                     </div>
                   )}
-                  {/* Badge */}
-                  {p.badge && (
+                  {p.isSoldOut && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        background: "rgba(0,0,0,0.42)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: "'Jost',sans-serif",
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: "#fff",
+                          letterSpacing: "0.18em",
+                          textTransform: "uppercase",
+                          border: "2px solid rgba(255,255,255,0.6)",
+                          padding: "6px 18px",
+                          borderRadius: 99,
+                        }}
+                      >
+                        Sold Out
+                      </span>
+                    </div>
+                  )}
+                  {!p.isVisible && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        background: "rgba(0,0,0,0.55)",
+                        padding: "4px 0",
+                        textAlign: "center",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontFamily: "'Jost',sans-serif",
+                          fontSize: 10,
+                          color: "#fff",
+                          fontWeight: 600,
+                          letterSpacing: "0.12em",
+                        }}
+                      >
+                        HIDDEN FROM PUBLIC
+                      </span>
+                    </div>
+                  )}
+                  {p.badge && !p.isSoldOut && (
                     <span
                       style={{
                         position: "absolute",
@@ -562,7 +1699,7 @@ export default function Properties() {
                         color: "#fff",
                         fontSize: 9,
                         fontWeight: 700,
-                        fontFamily: "'Jost', sans-serif",
+                        fontFamily: "'Jost',sans-serif",
                         padding: "3px 9px",
                         borderRadius: 99,
                         letterSpacing: "0.06em",
@@ -572,11 +1709,38 @@ export default function Properties() {
                       {p.badge}
                     </span>
                   )}
-                  {/* Status */}
-                  <div style={{ position: "absolute", top: 10, right: 10 }}>
+                  {hasOffer && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: p.badge && !p.isSoldOut ? 32 : 10,
+                        left: 10,
+                        background: "#dc2626",
+                        color: "#fff",
+                        fontSize: 9,
+                        fontWeight: 700,
+                        fontFamily: "'Jost',sans-serif",
+                        padding: "3px 9px",
+                        borderRadius: 99,
+                      }}
+                    >
+                      {savings}% OFF
+                    </span>
+                  )}
+                  {p.isFeatured && (
+                    <span style={{ position: "absolute", top: 10, right: 10 }}>
+                      <Star size={15} fill="#F59E0B" color="#F59E0B" />
+                    </span>
+                  )}
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: p.isFeatured ? 30 : 10,
+                      right: 10,
+                    }}
+                  >
                     <StatusPill status={p.status} />
                   </div>
-                  {/* Image count */}
                   {p.images?.length > 1 && (
                     <span
                       style={{
@@ -586,7 +1750,7 @@ export default function Properties() {
                         background: "rgba(0,0,0,0.55)",
                         color: "#fff",
                         fontSize: 10,
-                        fontFamily: "'Jost', sans-serif",
+                        fontFamily: "'Jost',sans-serif",
                         padding: "2px 8px",
                         borderRadius: 99,
                       }}
@@ -600,7 +1764,7 @@ export default function Properties() {
                 <div style={{ padding: "16px 18px 18px" }}>
                   <p
                     style={{
-                      fontFamily: "'Cormorant Garamond', serif",
+                      fontFamily: "'Cormorant Garamond',serif",
                       fontSize: 17,
                       fontWeight: 700,
                       color: "#1a0f00",
@@ -614,7 +1778,7 @@ export default function Properties() {
                   </p>
                   <p
                     style={{
-                      fontFamily: "'Jost', sans-serif",
+                      fontFamily: "'Jost',sans-serif",
                       fontSize: 12,
                       color: MUTED,
                       marginBottom: 10,
@@ -625,13 +1789,11 @@ export default function Properties() {
                   >
                     <MapPin size={11} color="#c2884a" /> {p.location}
                   </p>
-
-                  {/* Stats row */}
                   <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
                     {p.beds > 0 && (
                       <span
                         style={{
-                          fontFamily: "'Jost', sans-serif",
+                          fontFamily: "'Jost',sans-serif",
                           fontSize: 11,
                           color: MUTED,
                           display: "flex",
@@ -646,7 +1808,7 @@ export default function Properties() {
                     {p.baths > 0 && (
                       <span
                         style={{
-                          fontFamily: "'Jost', sans-serif",
+                          fontFamily: "'Jost',sans-serif",
                           fontSize: 11,
                           color: MUTED,
                           display: "flex",
@@ -661,7 +1823,7 @@ export default function Properties() {
                     {p.area > 0 && (
                       <span
                         style={{
-                          fontFamily: "'Jost', sans-serif",
+                          fontFamily: "'Jost',sans-serif",
                           fontSize: 11,
                           color: MUTED,
                           display: "flex",
@@ -675,7 +1837,7 @@ export default function Properties() {
                     )}
                     <span
                       style={{
-                        fontFamily: "'Jost', sans-serif",
+                        fontFamily: "'Jost',sans-serif",
                         fontSize: 11,
                         color: MUTED,
                         marginLeft: "auto",
@@ -689,30 +1851,54 @@ export default function Properties() {
                   </div>
 
                   {/* Price */}
-                  <p
-                    style={{
-                      fontFamily: "'Jost', sans-serif",
-                      fontSize: 15,
-                      fontWeight: 700,
-                      color: PURPLE,
-                      marginBottom: 14,
-                    }}
-                  >
-                    KES {fmt(p.price)}
-                    {p.priceLabel ? (
-                      <span
-                        style={{ fontSize: 11, fontWeight: 400, color: MUTED }}
+                  <div style={{ marginBottom: 14 }}>
+                    {hasOffer ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "baseline",
+                          gap: 8,
+                        }}
                       >
-                        {" "}
-                        / {p.priceLabel}
+                        <span
+                          style={{
+                            fontFamily: "'Jost',sans-serif",
+                            fontSize: 15,
+                            fontWeight: 700,
+                            color: "#dc2626",
+                          }}
+                        >
+                          {formatKES(effective)}
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: "'Jost',sans-serif",
+                            fontSize: 12,
+                            color: MUTED,
+                            textDecoration: "line-through",
+                          }}
+                        >
+                          {formatKES(pricing.original)}
+                        </span>
+                      </div>
+                    ) : (
+                      <span
+                        style={{
+                          fontFamily: "'Jost',sans-serif",
+                          fontSize: 15,
+                          fontWeight: 700,
+                          color: PURPLE,
+                        }}
+                      >
+                        {formatKES(pricing.original ?? p.price)}
                       </span>
-                    ) : null}
-                  </p>
+                    )}
+                  </div>
 
                   {/* Actions */}
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 6 }}>
                     <button
-                      onClick={() => openEdit(p)}
+                      onClick={() => handleOpenEdit(p)}
                       style={{
                         flex: 1,
                         display: "flex",
@@ -724,7 +1910,7 @@ export default function Properties() {
                         border: `1.5px solid ${BORDER}`,
                         background: CREAM,
                         cursor: "pointer",
-                        fontFamily: "'Jost', sans-serif",
+                        fontFamily: "'Jost',sans-serif",
                         fontSize: 12,
                         fontWeight: 500,
                         color: MUTED,
@@ -741,34 +1927,33 @@ export default function Properties() {
                     >
                       <Pencil size={13} /> Edit
                     </button>
-                    <button
-                      onClick={() => openDelete(p)}
-                      style={{
-                        flex: 1,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 6,
-                        padding: "9px 0",
-                        borderRadius: 10,
-                        border: "1.5px solid #fca5a5",
-                        background: "#fff5f5",
-                        cursor: "pointer",
-                        fontFamily: "'Jost', sans-serif",
-                        fontSize: 12,
-                        fontWeight: 500,
-                        color: "#dc2626",
-                        transition: "all 0.15s",
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = "#fef2f2";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "#fff5f5";
-                      }}
+                    <IconBtn
+                      onClick={() => toggleVisibility(p)}
+                      title={p.isVisible ? "Hide" : "Show"}
+                      active={!p.isVisible}
+                      activeColor="#374151"
                     >
-                      <Trash2 size={13} /> Delete
-                    </button>
+                      {p.isVisible ? (
+                        <Eye size={13} color={MUTED} />
+                      ) : (
+                        <EyeOff size={13} color="#374151" />
+                      )}
+                    </IconBtn>
+                    <IconBtn
+                      onClick={() => toggleSoldOut(p)}
+                      title={p.isSoldOut ? "Mark available" : "Mark sold out"}
+                      active={p.isSoldOut}
+                      activeColor="#6b7280"
+                    >
+                      <Tag size={13} color={p.isSoldOut ? "#374151" : MUTED} />
+                    </IconBtn>
+                    <IconBtn
+                      onClick={() => openDelete(p)}
+                      title="Delete"
+                      danger
+                    >
+                      <Trash2 size={13} color="#dc2626" />
+                    </IconBtn>
                   </div>
                 </div>
               </div>
@@ -777,7 +1962,7 @@ export default function Properties() {
         </div>
       )}
 
-      {/* ── Pagination ── */}
+      {/* Pagination */}
       {pages > 1 && (
         <div
           style={{
@@ -809,17 +1994,16 @@ export default function Properties() {
                 width: 36,
                 height: 36,
                 borderRadius: 10,
-                border: "none",
+                border: n === page ? "none" : `1.5px solid ${BORDER}`,
                 background:
                   n === page
                     ? `linear-gradient(135deg,${PURPLE},${DPURPLE})`
                     : CREAM,
                 color: n === page ? "#fff" : MUTED,
-                fontFamily: "'Jost', sans-serif",
+                fontFamily: "'Jost',sans-serif",
                 fontSize: 13,
                 fontWeight: n === page ? 600 : 400,
                 cursor: "pointer",
-                border: n === page ? "none" : `1.5px solid ${BORDER}`,
               }}
             >
               {n}
@@ -842,636 +2026,7 @@ export default function Properties() {
         </div>
       )}
 
-      {/* ════════════════ EDIT MODAL ════════════════ */}
-      {editing && (
-        <Backdrop onClose={closeEdit}>
-          <div style={{ ...card, maxHeight: "90vh", overflowY: "auto" }}>
-            {/* Header */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 24,
-              }}
-            >
-              <div>
-                <p
-                  style={{
-                    fontFamily: "'Jost', sans-serif",
-                    fontSize: 11,
-                    color: "#b45309",
-                    letterSpacing: "0.2em",
-                    textTransform: "uppercase",
-                    marginBottom: 4,
-                  }}
-                >
-                  Editing
-                </p>
-                <h2
-                  style={{
-                    fontFamily: "'Cormorant Garamond', serif",
-                    fontSize: 22,
-                    fontWeight: 700,
-                    color: "#1a0f00",
-                  }}
-                >
-                  {editing.name}
-                </h2>
-              </div>
-              <button
-                onClick={closeEdit}
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: "50%",
-                  border: `1.5px solid ${BORDER}`,
-                  background: CREAM,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <X size={15} color={MUTED} />
-              </button>
-            </div>
-
-            {/* Feedback banners */}
-            {editSuccess && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  background: "#d1fae5",
-                  border: "1.5px solid #6ee7b7",
-                  borderRadius: 12,
-                  padding: "12px 16px",
-                  marginBottom: 20,
-                }}
-              >
-                <CheckCircle size={15} color="#065f46" />
-                <span
-                  style={{
-                    fontFamily: "'Jost', sans-serif",
-                    fontSize: 13,
-                    color: "#065f46",
-                    fontWeight: 500,
-                  }}
-                >
-                  Saved successfully!
-                </span>
-              </div>
-            )}
-            {editError && (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  background: "#fef2f2",
-                  border: "1.5px solid #fca5a5",
-                  borderRadius: 12,
-                  padding: "12px 16px",
-                  marginBottom: 20,
-                }}
-              >
-                <AlertCircle size={15} color="#dc2626" />
-                <span
-                  style={{
-                    fontFamily: "'Jost', sans-serif",
-                    fontSize: 13,
-                    color: "#dc2626",
-                  }}
-                >
-                  {editError}
-                </span>
-              </div>
-            )}
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 24,
-              }}
-            >
-              {/* LEFT */}
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: 18 }}
-              >
-                <Field label="Property Name *">
-                  <IconInput
-                    icon={Home}
-                    value={editForm.name}
-                    onChange={setEditField("name")}
-                    placeholder="Property name"
-                  />
-                </Field>
-                <Field label="Location *">
-                  <IconInput
-                    icon={MapPin}
-                    value={editForm.location}
-                    onChange={setEditField("location")}
-                    placeholder="Location"
-                  />
-                </Field>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 12,
-                  }}
-                >
-                  <Field label="Price (KES) *">
-                    <IconInput
-                      icon={DollarSign}
-                      value={editForm.price}
-                      onChange={setEditField("price")}
-                      type="number"
-                    />
-                  </Field>
-                  <Field label="Price label">
-                    <IconInput
-                      icon={Tag}
-                      value={editForm.priceLabel}
-                      onChange={setEditField("priceLabel")}
-                      placeholder="Per month"
-                    />
-                  </Field>
-                </div>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr 1fr",
-                    gap: 10,
-                  }}
-                >
-                  <Field label="Beds">
-                    <IconInput
-                      icon={Bed}
-                      value={editForm.beds}
-                      onChange={setEditField("beds")}
-                      type="number"
-                    />
-                  </Field>
-                  <Field label="Baths">
-                    <IconInput
-                      icon={Bath}
-                      value={editForm.baths}
-                      onChange={setEditField("baths")}
-                      type="number"
-                    />
-                  </Field>
-                  <Field label="Area m²">
-                    <IconInput
-                      icon={Maximize2}
-                      value={editForm.area}
-                      onChange={setEditField("area")}
-                      type="number"
-                    />
-                  </Field>
-                </div>
-
-                {/* Status */}
-                <Field label="Status">
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {STATUSES.map((s) => (
-                      <button
-                        key={s}
-                        onClick={() => setEditDirect("status", s)}
-                        style={{
-                          fontFamily: "'Jost', sans-serif",
-                          fontSize: 12,
-                          padding: "7px 14px",
-                          borderRadius: 99,
-                          cursor: "pointer",
-                          transition: "all 0.15s",
-                          border:
-                            editForm.status === s
-                              ? "none"
-                              : `1.5px solid ${BORDER}`,
-                          background:
-                            editForm.status === s
-                              ? `linear-gradient(135deg,${PURPLE},${DPURPLE})`
-                              : CREAM,
-                          color: editForm.status === s ? "#fff" : MUTED,
-                          fontWeight: editForm.status === s ? 600 : 400,
-                        }}
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </Field>
-
-                {/* Description */}
-                <Field label="Description">
-                  <textarea
-                    value={editForm.description}
-                    onChange={setEditField("description")}
-                    rows={4}
-                    style={{
-                      ...inputBase,
-                      resize: "vertical",
-                      lineHeight: 1.7,
-                    }}
-                    onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
-                    onBlur={(e) => (e.target.style.borderColor = BORDER)}
-                  />
-                </Field>
-              </div>
-
-              {/* RIGHT */}
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: 18 }}
-              >
-                {/* Type */}
-                <Field label="Property Type *">
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-                    {PROPERTY_TYPES.map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => setEditDirect("type", t)}
-                        style={{
-                          fontFamily: "'Jost', sans-serif",
-                          fontSize: 12,
-                          padding: "7px 13px",
-                          borderRadius: 99,
-                          cursor: "pointer",
-                          transition: "all 0.15s",
-                          border:
-                            editForm.type === t
-                              ? "none"
-                              : `1.5px solid ${BORDER}`,
-                          background:
-                            editForm.type === t
-                              ? `linear-gradient(135deg,${PURPLE},${DPURPLE})`
-                              : CREAM,
-                          color: editForm.type === t ? "#fff" : MUTED,
-                          fontWeight: editForm.type === t ? 600 : 400,
-                        }}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                </Field>
-
-                {/* Badge */}
-                <Field label="Badge">
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-                    {BADGES.map((b) => (
-                      <button
-                        key={b}
-                        onClick={() =>
-                          setEditDirect("badge", editForm.badge === b ? "" : b)
-                        }
-                        style={{
-                          fontFamily: "'Jost', sans-serif",
-                          fontSize: 12,
-                          padding: "7px 13px",
-                          borderRadius: 99,
-                          cursor: "pointer",
-                          transition: "all 0.15s",
-                          border:
-                            editForm.badge === b
-                              ? "none"
-                              : `1.5px solid ${BORDER}`,
-                          background: editForm.badge === b ? "#b45309" : CREAM,
-                          color: editForm.badge === b ? "#fff" : MUTED,
-                          fontWeight: editForm.badge === b ? 600 : 400,
-                        }}
-                      >
-                        {b}
-                      </button>
-                    ))}
-                  </div>
-                </Field>
-
-                {/* Key features */}
-                <Field
-                  label="Key Features"
-                  hint="Press Enter or click + to add"
-                >
-                  <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                    <input
-                      value={featureInput}
-                      onChange={(e) => setFeatureInput(e.target.value)}
-                      onKeyDown={(e) =>
-                        e.key === "Enter" && (e.preventDefault(), addFeature())
-                      }
-                      placeholder="e.g. Swimming pool…"
-                      style={{
-                        ...inputBase,
-                        fontSize: 12,
-                        padding: "9px 13px",
-                      }}
-                      onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
-                      onBlur={(e) => (e.target.style.borderColor = BORDER)}
-                    />
-                    <button
-                      onClick={addFeature}
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: 10,
-                        border: "none",
-                        flexShrink: 0,
-                        background: `linear-gradient(135deg,${PURPLE},${DPURPLE})`,
-                        color: "#fff",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {editForm.features.map((f, i) => (
-                      <span
-                        key={i}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 5,
-                          background: "#f3e8ff",
-                          color: PURPLE,
-                          fontSize: 11,
-                          fontWeight: 500,
-                          padding: "4px 10px",
-                          borderRadius: 99,
-                          fontFamily: "'Jost', sans-serif",
-                        }}
-                      >
-                        {f}
-                        <button
-                          onClick={() => removeFeature(i)}
-                          style={{
-                            background: "none",
-                            border: "none",
-                            cursor: "pointer",
-                            padding: 0,
-                            display: "flex",
-                            alignItems: "center",
-                          }}
-                        >
-                          <X size={10} color={PURPLE} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </Field>
-
-                {/* Existing images */}
-                <Field
-                  label="Current Images"
-                  hint="Click × to remove an image from Cloudinary"
-                >
-                  {editing.images?.length > 0 ? (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns:
-                          "repeat(auto-fill, minmax(72px, 1fr))",
-                        gap: 7,
-                      }}
-                    >
-                      {editing.images.map((img, idx) => (
-                        <div
-                          key={img._id}
-                          style={{
-                            position: "relative",
-                            borderRadius: 8,
-                            overflow: "hidden",
-                            aspectRatio: "1",
-                            border:
-                              idx === 0
-                                ? `2px solid ${PURPLE}`
-                                : `2px solid transparent`,
-                          }}
-                        >
-                          <img
-                            src={img.url}
-                            alt=""
-                            style={{
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                          />
-                          {idx === 0 && (
-                            <span
-                              style={{
-                                position: "absolute",
-                                bottom: 3,
-                                left: 3,
-                                background: PURPLE,
-                                color: "#fff",
-                                fontSize: 8,
-                                fontWeight: 700,
-                                fontFamily: "'Jost', sans-serif",
-                                padding: "2px 5px",
-                                borderRadius: 99,
-                              }}
-                            >
-                              PRIMARY
-                            </span>
-                          )}
-                          <button
-                            onClick={() => removeExistingImage(img._id)}
-                            style={{
-                              position: "absolute",
-                              top: 3,
-                              right: 3,
-                              width: 18,
-                              height: 18,
-                              borderRadius: "50%",
-                              background: "rgba(0,0,0,0.65)",
-                              border: "none",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <X size={9} color="#fff" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p
-                      style={{
-                        fontFamily: "'Jost', sans-serif",
-                        fontSize: 12,
-                        color: LABEL,
-                      }}
-                    >
-                      No images yet.
-                    </p>
-                  )}
-                </Field>
-
-                {/* Upload new images */}
-                <Field label="Add New Images">
-                  <div
-                    onClick={() => fileEditRef.current?.click()}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      addEditImages(e.dataTransfer.files);
-                    }}
-                    style={{
-                      border: "2px dashed #e8ddd2",
-                      borderRadius: 12,
-                      padding: "20px",
-                      textAlign: "center",
-                      background: CREAM,
-                      cursor: "pointer",
-                      marginBottom: 10,
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.borderColor = "#c2884a")
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.borderColor = "#e8ddd2")
-                    }
-                  >
-                    <Upload
-                      size={16}
-                      color={PURPLE}
-                      strokeWidth={1.8}
-                      style={{ margin: "0 auto 6px" }}
-                    />
-                    <p
-                      style={{
-                        fontFamily: "'Jost', sans-serif",
-                        fontSize: 12,
-                        color: MUTED,
-                      }}
-                    >
-                      Drop or{" "}
-                      <span style={{ color: PURPLE, fontWeight: 600 }}>
-                        browse
-                      </span>
-                    </p>
-                    <input
-                      ref={fileEditRef}
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      multiple
-                      style={{ display: "none" }}
-                      onChange={(e) => {
-                        addEditImages(e.target.files);
-                        e.target.value = "";
-                      }}
-                    />
-                  </div>
-                  {editImages.length > 0 && (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns:
-                          "repeat(auto-fill, minmax(64px, 1fr))",
-                        gap: 7,
-                      }}
-                    >
-                      {editImages.map(({ preview }, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            position: "relative",
-                            borderRadius: 8,
-                            overflow: "hidden",
-                            aspectRatio: "1",
-                          }}
-                        >
-                          <img
-                            src={preview}
-                            alt=""
-                            style={{
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                          />
-                          <button
-                            onClick={() => removeNewImage(idx)}
-                            style={{
-                              position: "absolute",
-                              top: 3,
-                              right: 3,
-                              width: 18,
-                              height: 18,
-                              borderRadius: "50%",
-                              background: "rgba(0,0,0,0.65)",
-                              border: "none",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <X size={9} color="#fff" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </Field>
-              </div>
-            </div>
-
-            {/* Save button */}
-            <button
-              onClick={submitEdit}
-              disabled={editLoading}
-              style={{
-                width: "100%",
-                marginTop: 28,
-                padding: "15px",
-                borderRadius: 14,
-                border: "none",
-                background: editLoading
-                  ? "#9ca3af"
-                  : `linear-gradient(135deg,${PURPLE},${DPURPLE})`,
-                color: "#fff",
-                fontFamily: "'Jost', sans-serif",
-                fontSize: 14,
-                fontWeight: 600,
-                letterSpacing: "0.08em",
-                textTransform: "uppercase",
-                cursor: editLoading ? "not-allowed" : "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 10,
-                boxShadow: editLoading
-                  ? "none"
-                  : "0 8px 24px rgba(123,45,139,0.28)",
-              }}
-            >
-              {editLoading ? (
-                <>
-                  <Loader2
-                    size={15}
-                    style={{ animation: "spin 0.8s linear infinite" }}
-                  />{" "}
-                  Saving…
-                </>
-              ) : (
-                "Save Changes"
-              )}
-            </button>
-          </div>
-        </Backdrop>
-      )}
-
-      {/* ════════════════ DELETE CONFIRM MODAL ════════════════ */}
+      {/* Delete modal */}
       {deleting && (
         <Backdrop onClose={closeDelete}>
           <div style={{ ...card, maxWidth: 440, margin: "0 auto" }}>
@@ -1492,7 +2047,7 @@ export default function Properties() {
               </div>
               <h2
                 style={{
-                  fontFamily: "'Cormorant Garamond', serif",
+                  fontFamily: "'Cormorant Garamond',serif",
                   fontSize: 22,
                   fontWeight: 700,
                   color: "#1a0f00",
@@ -1503,15 +2058,14 @@ export default function Properties() {
               </h2>
               <p
                 style={{
-                  fontFamily: "'Jost', sans-serif",
+                  fontFamily: "'Jost',sans-serif",
                   fontSize: 13,
                   color: MUTED,
                   lineHeight: 1.6,
                 }}
               >
                 <strong>{deleting.name}</strong> will be permanently removed
-                along with all its images from Cloudinary. This cannot be
-                undone.
+                along with all its images. This cannot be undone.
               </p>
             </div>
             {deleteError && (
@@ -1530,7 +2084,7 @@ export default function Properties() {
                 <AlertCircle size={14} color="#dc2626" />
                 <span
                   style={{
-                    fontFamily: "'Jost', sans-serif",
+                    fontFamily: "'Jost',sans-serif",
                     fontSize: 12,
                     color: "#dc2626",
                   }}
@@ -1555,7 +2109,7 @@ export default function Properties() {
                   border: `1.5px solid ${BORDER}`,
                   background: CREAM,
                   cursor: "pointer",
-                  fontFamily: "'Jost', sans-serif",
+                  fontFamily: "'Jost',sans-serif",
                   fontSize: 13,
                   fontWeight: 600,
                   color: MUTED,
@@ -1573,7 +2127,7 @@ export default function Properties() {
                   background: deleteLoading ? "#9ca3af" : "#dc2626",
                   color: "#fff",
                   cursor: deleteLoading ? "not-allowed" : "pointer",
-                  fontFamily: "'Jost', sans-serif",
+                  fontFamily: "'Jost',sans-serif",
                   fontSize: 13,
                   fontWeight: 600,
                   display: "flex",
@@ -1598,6 +2152,8 @@ export default function Properties() {
           </div>
         </Backdrop>
       )}
+
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }
