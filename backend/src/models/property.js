@@ -1,8 +1,6 @@
 const mongoose = require("mongoose");
 
-// ─── Default seed values (used for validation fallback & seeding) ─────────────
-// These are no longer hard-coded enums — the source of truth is the Category
-// collection. Keep these only as a safe fallback for standalone script usage.
+// ─── Default seed values ──────────────────────────────────────────────────────
 const DEFAULT_TYPES = [
   "Villa",
   "Apartment",
@@ -25,45 +23,62 @@ const DEFAULT_BADGES = [
 ];
 
 const STATUS_TYPES = ["active", "draft", "archived", "sold", "rented"];
+const LISTING_MODES = ["whole", "unit"]; // entire building vs one section
+const LISTING_INTENTS = ["sale", "rent", "both"]; // what the owner is offering
+const LAND_UNITS = ["acres", "hectares", "sqm", "sqft"];
 
-// ─── Pricing sub-schema ───────────────────────────────────────────────────────
+// ─── Pricing sub-schema (sale) ────────────────────────────────────────────────
 const pricingSchema = new mongoose.Schema(
   {
-    // The true/original asking price (always set)
     original: {
       type: Number,
       required: [true, "Price is required"],
       min: [0, "Price cannot be negative"],
     },
-
-    // Optional: override with a fixed offer price instead of a % discount
-    // Either set this OR discountPercent — not both. Controller enforces this.
     offerPrice: {
       type: Number,
       min: [0, "Offer price cannot be negative"],
       default: null,
     },
-
-    // Percentage off (0–99). Auto-computes effectivePrice if offerPrice not set.
     discountPercent: {
       type: Number,
       min: [0, "Discount cannot be negative"],
       max: [99, "Discount cannot exceed 99%"],
       default: null,
     },
+    offerExpiresAt: { type: Date, default: null },
+    // Human-readable label e.g. "KES 24.5M" — auto-generated if blank
+    label: { type: String, trim: true, maxlength: 40 },
+  },
+  { _id: false },
+);
 
-    // Optional expiry for the offer. After this date, no discount is applied.
-    offerExpiresAt: {
-      type: Date,
-      default: null,
-    },
+// ─── Rental pricing sub-schema ────────────────────────────────────────────────
+// Used when listingIntent is "rent" or "both".
+// At least one of rentPerDay / rentPerMonth should be set.
+const rentalPricingSchema = new mongoose.Schema(
+  {
+    rentPerDay: { type: Number, min: 0, default: null },
+    rentPerMonth: { type: Number, min: 0, default: null },
+    // e.g. "KES 45K/mo" — auto-generated if blank
+    label: { type: String, trim: true, maxlength: 60 },
+  },
+  { _id: false },
+);
 
-    // Human-readable label e.g. "KES 24.5M", "KES 8,800,000"
-    // Auto-generated if not supplied (see pre-save hook below)
-    label: {
+// ─── Land area sub-schema ─────────────────────────────────────────────────────
+// Separate from `area` (built-up m²). Used for Land/Plot listings (and any
+// property where the land size matters independently of the built-up area).
+const landAreaSchema = new mongoose.Schema(
+  {
+    value: { type: Number, min: 0, required: true },
+    unit: {
       type: String,
-      trim: true,
-      maxlength: 40,
+      enum: {
+        values: LAND_UNITS,
+        message: `Land unit must be one of: ${LAND_UNITS.join(", ")}`,
+      },
+      required: true,
     },
   },
   { _id: false },
@@ -83,12 +98,22 @@ const imageSchema = new mongoose.Schema(
 // ─── Main Property Schema ─────────────────────────────────────────────────────
 const propertySchema = new mongoose.Schema(
   {
-    // ── Core identity ──────────────────────────────────────────────────────────
+    // ── Identity ───────────────────────────────────────────────────────────────
+    // `name` is the primary/unit-level name, e.g. "2 Bedroom Apartment"
     name: {
       type: String,
       required: [true, "Property name is required"],
       trim: true,
       maxlength: [120, "Name cannot exceed 120 characters"],
+    },
+
+    // Parent complex / building name, e.g. "Sunshine Apartments"
+    // Required when listingMode === "unit"; optional otherwise.
+    buildingName: {
+      type: String,
+      trim: true,
+      maxlength: [120, "Building name cannot exceed 120 characters"],
+      default: null,
     },
 
     location: {
@@ -100,7 +125,7 @@ const propertySchema = new mongoose.Schema(
 
     coordinates: {
       type: { type: String, enum: ["Point"], default: "Point" },
-      coordinates: { type: [Number], default: [36.8219, -1.2921] }, // Nairobi default
+      coordinates: { type: [Number], default: [36.8219, -1.2921] },
     },
 
     description: {
@@ -111,36 +136,59 @@ const propertySchema = new mongoose.Schema(
 
     features: [{ type: String, trim: true, maxlength: 80 }],
 
-    // ── Classification (references Category collection) ────────────────────────
-    // Stored as plain strings for query simplicity; Category model is the
-    // source of truth for valid values (validated in controller).
+    // ── Listing mode & intent ──────────────────────────────────────────────────
+    // listingMode:   "whole" = entire property/building on offer
+    //                "unit"  = one section inside a larger building
+    listingMode: {
+      type: String,
+      enum: {
+        values: LISTING_MODES,
+        message: `listingMode must be: ${LISTING_MODES.join(", ")}`,
+      },
+      default: "whole",
+    },
+
+    // listingIntent: what the owner is offering
+    //   "sale"  → only for-sale pricing applies
+    //   "rent"  → only rental pricing applies
+    //   "both"  → both sale and rental pricing shown
+    listingIntent: {
+      type: String,
+      enum: {
+        values: LISTING_INTENTS,
+        message: `listingIntent must be: ${LISTING_INTENTS.join(", ")}`,
+      },
+      default: "sale",
+    },
+
+    // ── Classification ─────────────────────────────────────────────────────────
     type: {
       type: String,
       required: [true, "Property type is required"],
       trim: true,
     },
+    badge: { type: String, trim: true, default: "New Listing" },
 
-    badge: {
-      type: String,
-      trim: true,
-      default: "New Listing",
-    },
-
-    // ── Specs ─────────────────────────────────────────────────────────────────
+    // ── Specs ──────────────────────────────────────────────────────────────────
     beds: { type: Number, default: 0, min: 0, max: 50 },
     baths: { type: Number, default: 0, min: 0, max: 50 },
-    area: { type: Number, min: 0 }, // m²
+    area: { type: Number, min: 0 }, // built-up m²
 
-    // ── Smart Pricing ─────────────────────────────────────────────────────────
-    pricing: {
-      type: pricingSchema,
-      required: true,
-    },
+    // Land area — separate from built-up area; populated for Land/Plot and
+    // any listing where land size is relevant
+    landArea: { type: landAreaSchema, default: null },
 
-    // ── Media ─────────────────────────────────────────────────────────────────
+    // ── Pricing ────────────────────────────────────────────────────────────────
+    // Sale pricing — required when listingIntent is "sale" or "both"
+    pricing: { type: pricingSchema, default: null },
+
+    // Rental pricing — required when listingIntent is "rent" or "both"
+    rentalPricing: { type: rentalPricingSchema, default: null },
+
+    // ── Media ──────────────────────────────────────────────────────────────────
     images: [imageSchema],
 
-    // ── Lifecycle / Visibility ────────────────────────────────────────────────
+    // ── Lifecycle / Visibility ─────────────────────────────────────────────────
     status: {
       type: String,
       enum: {
@@ -149,26 +197,21 @@ const propertySchema = new mongoose.Schema(
       },
       default: "active",
     },
-
-    // Hard visibility toggle — false = hidden from all public queries
     isVisible: { type: Boolean, default: true },
-
-    // Soft sold-out flag — property stays visible but is tagged "Sold Out"
     isSoldOut: { type: Boolean, default: false },
-
     soldAt: { type: Date, default: null },
 
-    // ── Featuring ─────────────────────────────────────────────────────────────
+    // ── Featuring ──────────────────────────────────────────────────────────────
     isFeatured: { type: Boolean, default: false },
     featuredUntil: { type: Date, default: null },
 
-    // ── Engagement ────────────────────────────────────────────────────────────
+    // ── Engagement ─────────────────────────────────────────────────────────────
     rating: { type: Number, default: 0, min: 0, max: 5 },
     reviewCount: { type: Number, default: 0 },
     viewCount: { type: Number, default: 0 },
     inquiryCount: { type: Number, default: 0 },
 
-    // ── Ownership ─────────────────────────────────────────────────────────────
+    // ── Ownership ──────────────────────────────────────────────────────────────
     listedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -182,30 +225,46 @@ const propertySchema = new mongoose.Schema(
   },
 );
 
-// ─── Pre-save: pricing logic ──────────────────────────────────────────────────
+// ─── Pre-save hook ────────────────────────────────────────────────────────────
 propertySchema.pre("save", function (next) {
-  const p = this.pricing;
+  // ── Sale pricing ────────────────────────────────────────────────────────────
+  if (this.pricing) {
+    const p = this.pricing;
 
-  // Offer expiry check — clear discount if expired
-  if (p.offerExpiresAt && new Date() > p.offerExpiresAt) {
-    p.offerPrice = null;
-    p.discountPercent = null;
-    p.offerExpiresAt = null;
+    if (p.offerExpiresAt && new Date() > p.offerExpiresAt) {
+      p.offerPrice = null;
+      p.discountPercent = null;
+      p.offerExpiresAt = null;
+    }
+
+    if (!p.label) {
+      p.label = formatKES(getEffectivePrice(p));
+    }
   }
 
-  // Auto-generate price label if not manually set
-  if (!p.label) {
-    const effective = getEffectivePrice(p);
-    p.label = formatKES(effective);
+  // ── Rental pricing label ────────────────────────────────────────────────────
+  if (this.rentalPricing && !this.rentalPricing.label) {
+    const rp = this.rentalPricing;
+    const parts = [];
+    if (rp.rentPerMonth != null) parts.push(`${formatKES(rp.rentPerMonth)}/mo`);
+    if (rp.rentPerDay != null) parts.push(`${formatKES(rp.rentPerDay)}/day`);
+    rp.label = parts.join(" · ") || null;
   }
 
-  // Auto-set status & badge when sold out
+  // ── Sold out ────────────────────────────────────────────────────────────────
   if (this.isSoldOut && this.status === "active") {
     this.status = "sold";
     if (!this.soldAt) this.soldAt = new Date();
   }
 
-  // Auto-expire featured flag
+  // ── buildingName required for unit mode ─────────────────────────────────────
+  if (this.listingMode === "unit" && !this.buildingName) {
+    return next(
+      new Error("buildingName is required when listingMode is 'unit'"),
+    );
+  }
+
+  // ── Featured expiry ─────────────────────────────────────────────────────────
   if (
     this.isFeatured &&
     this.featuredUntil &&
@@ -219,16 +278,13 @@ propertySchema.pre("save", function (next) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getEffectivePrice(pricing) {
+  if (!pricing) return 0;
   const now = new Date();
   const offerActive =
     !pricing.offerExpiresAt || now <= new Date(pricing.offerExpiresAt);
-
-  if (offerActive && pricing.offerPrice != null) {
-    return pricing.offerPrice;
-  }
-  if (offerActive && pricing.discountPercent != null) {
+  if (offerActive && pricing.offerPrice != null) return pricing.offerPrice;
+  if (offerActive && pricing.discountPercent != null)
     return pricing.original * (1 - pricing.discountPercent / 100);
-  }
   return pricing.original;
 }
 
@@ -237,9 +293,7 @@ function formatKES(amount) {
     const m = amount / 1_000_000;
     return `KES ${Number.isInteger(m) ? m : m.toFixed(1)}M`;
   }
-  if (amount >= 1_000) {
-    return `KES ${(amount / 1_000).toFixed(0)}K`;
-  }
+  if (amount >= 1_000) return `KES ${(amount / 1_000).toFixed(0)}K`;
   return `KES ${amount.toLocaleString()}`;
 }
 
@@ -247,41 +301,41 @@ function formatKES(amount) {
 propertySchema.virtual("pricing.effectivePrice").get(function () {
   return getEffectivePrice(this.pricing);
 });
-
 propertySchema.virtual("pricing.savings").get(function () {
-  const effective = getEffectivePrice(this.pricing);
-  return this.pricing.original - effective;
+  if (!this.pricing) return 0;
+  return this.pricing.original - getEffectivePrice(this.pricing);
 });
-
 propertySchema.virtual("pricing.savingsPercent").get(function () {
+  if (!this.pricing) return 0;
   const savings = this.pricing.original - getEffectivePrice(this.pricing);
   if (savings <= 0) return 0;
   return Math.round((savings / this.pricing.original) * 100);
 });
-
 propertySchema.virtual("pricing.hasActiveOffer").get(function () {
+  if (!this.pricing) return false;
   const p = this.pricing;
-  const now = new Date();
-  const offerActive = !p.offerExpiresAt || now <= new Date(p.offerExpiresAt);
+  const offerActive =
+    !p.offerExpiresAt || new Date() <= new Date(p.offerExpiresAt);
   return offerActive && (p.offerPrice != null || p.discountPercent != null);
 });
-
 propertySchema.virtual("pricing.offerLabel").get(function () {
+  if (!this.pricing?.hasActiveOffer) return null;
   const p = this.pricing;
-  if (!this.pricing.hasActiveOffer) return null;
   if (p.discountPercent) return `${p.discountPercent}% OFF`;
-  if (p.offerPrice) {
-    const saved = p.original - p.offerPrice;
-    return `Save ${formatKES(saved)}`;
-  }
+  if (p.offerPrice) return `Save ${formatKES(p.original - p.offerPrice)}`;
   return null;
+});
+
+// Full display name: "2 Bedroom Apartment — Sunshine Apartments, Kiamiti Road"
+propertySchema.virtual("displayName").get(function () {
+  if (this.buildingName) return `${this.name} — ${this.buildingName}`;
+  return this.name;
 });
 
 propertySchema.virtual("primaryImage").get(function () {
   const primary = this.images?.find((img) => img.isPrimary);
   return primary?.url || this.images?.[0]?.url || null;
 });
-
 propertySchema.virtual("isCurrentlyFeatured").get(function () {
   if (!this.isFeatured) return false;
   if (!this.featuredUntil) return true;
@@ -297,12 +351,22 @@ propertySchema.index({ listedBy: 1 });
 propertySchema.index({ createdAt: -1 });
 propertySchema.index({ isVisible: 1, status: 1 });
 propertySchema.index({ isFeatured: 1, featuredUntil: 1 });
-propertySchema.index({ name: "text", location: "text", description: "text" });
+propertySchema.index({ listingIntent: 1 });
+propertySchema.index({ listingMode: 1 });
+propertySchema.index({
+  name: "text",
+  location: "text",
+  description: "text",
+  buildingName: "text",
+});
 
-// ─── Statics (kept for backward compat + seeding scripts) ────────────────────
+// ─── Statics ──────────────────────────────────────────────────────────────────
 propertySchema.statics.DEFAULT_TYPES = DEFAULT_TYPES;
 propertySchema.statics.DEFAULT_BADGES = DEFAULT_BADGES;
 propertySchema.statics.STATUSES = STATUS_TYPES;
+propertySchema.statics.LISTING_MODES = LISTING_MODES;
+propertySchema.statics.LISTING_INTENTS = LISTING_INTENTS;
+propertySchema.statics.LAND_UNITS = LAND_UNITS;
 propertySchema.statics.formatKES = formatKES;
 propertySchema.statics.getEffectivePrice = getEffectivePrice;
 
