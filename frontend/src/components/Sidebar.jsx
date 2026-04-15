@@ -211,7 +211,7 @@ export default function Sidebar({
                 lineHeight: 1,
               }}
             >
-              Slendor
+              Splendor
             </div>
             <div
               style={{
