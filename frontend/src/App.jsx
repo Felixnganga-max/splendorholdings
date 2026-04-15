@@ -9,6 +9,7 @@ import Listings from "./pages/Listings";
 import Contact from "./pages/Contact";
 import About from "./pages/About";
 import Auth from "./pages/Auth";
+import Services from "./pages/Services";
 
 function App() {
   const location = useLocation();
@@ -25,6 +26,7 @@ function App() {
         <Route path="/contact-us" element={<Contact />} />
         <Route path="/about-us" element={<About />} />
         <Route path="/authentication" element={<Auth />} />
+        <Route path="/services" element={<Services />} />
       </Routes>
       {!isDashboard && <Footer />}
     </>
