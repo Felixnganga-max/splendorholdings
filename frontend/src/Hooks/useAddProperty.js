@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const API_BASE = "http://localhost:5000/api/v1";
+const API_BASE = "https://splendorholdings-2v47.vercel.app/api/v1";
 
 /**
  * useAddProperty

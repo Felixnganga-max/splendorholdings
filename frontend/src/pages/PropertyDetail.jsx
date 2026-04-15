@@ -25,8 +25,7 @@ import axios from "axios";
 import Gallery from "../components/Gallery";
 
 // Try both possible API URLs
-const API_BASE_URL =
-  import.meta.env?.VITE_API_URL || "http://localhost:5000/api/v1";
+const API_BASE_URL = "https://splendorholdings-2v47.vercel.app/api/v1";
 
 /* ── Font injection ── */
 if (!document.querySelector("#slendor-fonts")) {

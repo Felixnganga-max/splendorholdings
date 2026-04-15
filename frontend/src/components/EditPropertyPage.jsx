@@ -22,7 +22,7 @@ import {
   Calendar,
 } from "lucide-react";
 
-const API_BASE = "http://localhost:5000/api/v1";
+const API_BASE = "https://splendorholdings-2v47.vercel.app/api/v1";
 const getToken = () => localStorage.getItem("accessToken");
 const authHeaders = () => ({ Authorization: `Bearer ${getToken()}` });
 

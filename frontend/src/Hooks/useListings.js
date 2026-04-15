@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:5000";
+const API_BASE = "https://splendorholdings-2v47.vercel.app";
 
 // ─── apiFetch ─────────────────────────────────────────────────────────────────
 async function apiFetch(path, options = {}) {

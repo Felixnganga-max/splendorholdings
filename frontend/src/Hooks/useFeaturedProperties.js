@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:5000";
+const API_BASE =
+  import.meta.env.VITE_API_URL ?? "https://splendorholdings-2v47.vercel.app";
 
 /**
  * Fetches a resource from the API with optional auth token.
