@@ -8,6 +8,11 @@ const DEFAULT_TYPES = [
   "Maisonette",
   "Land/Plot",
   "Commercial",
+  "Condos",
+  "Project",
+  "Pent House",
+  "Duplex House",
+  "Triplex House",
 ];
 
 const DEFAULT_BADGES = [

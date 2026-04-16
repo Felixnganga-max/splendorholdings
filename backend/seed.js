@@ -15,8 +15,8 @@ const User = require("./src/models/user");
 const ADMIN = {
   firstName: process.env.ADMIN_FIRST_NAME || "Super",
   lastName: process.env.ADMIN_LAST_NAME || "Admin",
-  email: process.env.ADMIN_EMAIL || "admin@example.com",
-  password: process.env.ADMIN_PASSWORD || "Admin@1234",
+  email: process.env.ADMIN_EMAIL || "david@splendorholdings.com",
+  password: process.env.ADMIN_PASSWORD || "{Gracefully@2026}",
   role: "admin",
 };
 
