@@ -148,19 +148,70 @@ const updateOrderStatusRules = [
 
 // ── Inquiry validators ─────────────────────────────────────────────────────────
 const createInquiryRules = [
-  body("propertyId")
-    .notEmpty()
+  // property is fully optional from the contact form
+  body("property")
+    .optional({ nullable: true, checkFalsy: true })
     .isMongoId()
-    .withMessage("Valid property ID is required"),
+    .withMessage("Invalid property ID"),
+
+  // legacy field name (keep for backwards compat)
+  body("propertyId")
+    .optional({ nullable: true, checkFalsy: true })
+    .isMongoId()
+    .withMessage("Invalid property ID"),
+
   body("message")
     .trim()
     .notEmpty()
     .withMessage("Message is required")
     .isLength({ max: 2000 }),
+
+  // Contact.jsx sends "inquiryType", legacy sends "type" — accept both
+  body("inquiryType")
+    .optional()
+    .isIn([
+      "Viewing Request",
+      "Price Inquiry",
+      "Offer Intent",
+      "Information",
+      "Buying a Property",
+      "Renting a Property",
+      "Selling My Property",
+      "Off-Plan Investment",
+      "Property Valuation",
+      "Property Management",
+      "General Enquiry",
+    ])
+    .withMessage("Invalid inquiry type"),
+
   body("type")
     .optional()
-    .isIn(["Viewing Request", "Price Inquiry", "Offer Intent", "Information"])
+    .isIn([
+      "Viewing Request",
+      "Price Inquiry",
+      "Offer Intent",
+      "Information",
+      "Buying a Property",
+      "Renting a Property",
+      "Selling My Property",
+      "Off-Plan Investment",
+      "Property Valuation",
+      "Property Management",
+      "General Enquiry",
+    ])
     .withMessage("Invalid inquiry type"),
+
+  // Contact.jsx sends "name"/"email"/"phone"
+  body("name").optional().trim().isLength({ max: 100 }),
+  body("email")
+    .optional()
+    .trim()
+    .isEmail()
+    .withMessage("Invalid email")
+    .normalizeEmail(),
+  body("phone").optional().trim().isLength({ max: 20 }),
+
+  // Legacy guest fields
   body("guestName").optional().trim().isLength({ max: 100 }),
   body("guestEmail")
     .optional()

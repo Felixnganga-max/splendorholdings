@@ -6,7 +6,7 @@ const DEFAULT_TYPES = [
   "Apartment",
   "Townhouse",
   "Maisonette",
-  "Land/Plot",
+  "Land",
   "Commercial",
   "Condos",
   "Project",
