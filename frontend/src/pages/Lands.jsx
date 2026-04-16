@@ -1,10 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Search,
   Heart,
   MapPin,
-  Bed,
-  Bath,
   Maximize2,
   Star,
   X,
@@ -15,6 +13,8 @@ import {
   LogIn,
   ArrowRight,
   RotateCcw,
+  TreePine,
+  Ruler,
 } from "lucide-react";
 import { useListings, usePropertyActions } from "../Hooks/useListings";
 
@@ -31,20 +31,24 @@ const B = {
   serif: "'Playfair Display', Georgia, serif",
   sans: "'Lato', 'Helvetica Neue', Arial, sans-serif",
   grad: "linear-gradient(135deg, #0a1172 0%, #1a3a5c 100%)",
+  // Land accent — earthy warm green to differentiate from Listings
+  landAccent: "#4a7c59",
+  landGrad: "linear-gradient(135deg, #2d5a3d 0%, #4a7c59 100%)",
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const heroBgs = [
-  "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1920&q=80",
-  "https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=1920&q=80",
-  "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1920&q=80",
+  "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1920&q=80",
+  "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1920&q=80",
+  "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=1920&q=80",
 ];
 
 const SORT_OPTIONS = [
   "Newest First",
   "Price: Low → High",
   "Price: High → Low",
-  "Top Rated",
+  "Area: Small → Large",
+  "Area: Large → Small",
   "Featured First",
 ];
 
@@ -57,6 +61,8 @@ const LOCATION_LIST = [
   "Machakos",
   "Kisumu",
 ];
+
+const LAND_UNIT_LABELS = ["All Units", "acres", "hectares", "sqm", "sqft"];
 
 const spanPattern = [
   { col: 1, row: 2 },
@@ -78,29 +84,37 @@ function getPrimaryImage(p) {
 }
 
 function formatPrice(p) {
-  const n = p.pricing?.original;
   if (p.pricing?.label) return p.pricing.label;
+  const n = p.pricing?.original;
   if (!n) return "—";
   if (n >= 1_000_000) return `KES ${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `KES ${(n / 1_000).toFixed(0)}K`;
   return `KES ${n}`;
 }
 
-function normalizeProperty(p) {
+function formatLandArea(landArea) {
+  if (!landArea?.value) return null;
+  const { value, unit } = landArea;
+  const display = Number.isInteger(value) ? value : value.toFixed(2);
+  return `${display} ${unit}`;
+}
+
+function normalizeLand(p) {
   return {
     id: p._id,
     name: p.name,
     location: p.location,
     price: formatPrice(p),
-    beds: p.beds ?? 0,
-    baths: p.baths ?? 0,
     area: p.area ?? 0,
-    type: p.type ?? "",
+    landArea: formatLandArea(p.landArea),
+    landAreaRaw: p.landArea,
+    type: p.type ?? "Land/Plot",
     badge: p.badge ?? "For Sale",
-    badgeColor: p.badgeColor ?? B.primary,
     rating: p.rating ?? null,
     img: getPrimaryImage(p),
     isSoldOut: p.isSoldOut ?? false,
+    listingIntent: p.listingIntent ?? "sale",
+    rentalPricing: p.rentalPricing ?? null,
     raw: p,
   };
 }
@@ -123,11 +137,11 @@ function SkeletonCard({ spanCol, spanRow }) {
   );
 }
 
-// ─── Listing Card ─────────────────────────────────────────────────────────────
-function ListingCard({ property, spanCol, spanRow, onAction }) {
+// ─── Land Card ─────────────────────────────────────────────────────────────────
+function LandCard({ property, spanCol, spanRow, onAction }) {
   const [liked, setLiked] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const p = normalizeProperty(property);
+  const p = normalizeLand(property);
   const isTall = spanRow === 2;
   const isWide = spanCol === 2;
 
@@ -180,14 +194,19 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
             position: "absolute",
             inset: 0,
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
-            color: B.accent,
-            fontSize: 13,
-            fontFamily: B.sans,
+            gap: 8,
+            background: "linear-gradient(135deg, #2d5a3d22, #4a7c5922)",
           }}
         >
-          No image
+          <TreePine size={32} color={B.landAccent} strokeWidth={1.5} />
+          <span
+            style={{ color: B.landAccent, fontSize: 12, fontFamily: B.sans }}
+          >
+            No image
+          </span>
         </div>
       )}
 
@@ -245,7 +264,7 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
       >
         <span
           style={{
-            background: p.badgeColor,
+            background: B.landGrad,
             color: "#fff",
             fontSize: 10,
             fontWeight: 700,
@@ -341,7 +360,7 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
         />
       </button>
 
-      {/* Bottom info — no name */}
+      {/* Bottom info */}
       <div
         style={{
           position: "absolute",
@@ -384,25 +403,11 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
             gap: 8,
           }}
         >
-          {/* Specs */}
-          <div style={{ display: "flex", gap: 12 }}>
-            {p.beds > 0 && (
+          {/* Land specs */}
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            {p.landArea && (
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <Bed size={12} color="rgba(212,175,55,0.9)" strokeWidth={1.8} />
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: "rgba(255,235,200,0.9)",
-                    fontFamily: B.sans,
-                  }}
-                >
-                  {p.beds} Beds
-                </span>
-              </div>
-            )}
-            {p.baths > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <Bath
+                <Ruler
                   size={12}
                   color="rgba(212,175,55,0.9)"
                   strokeWidth={1.8}
@@ -414,7 +419,7 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
                     fontFamily: B.sans,
                   }}
                 >
-                  {p.baths} Baths
+                  {p.landArea}
                 </span>
               </div>
             )}
@@ -436,6 +441,24 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
                 </span>
               </div>
             )}
+            {p.listingIntent === "rent" || p.listingIntent === "both" ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <TreePine
+                  size={11}
+                  color="rgba(212,175,55,0.9)"
+                  strokeWidth={1.8}
+                />
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: "rgba(255,235,200,0.9)",
+                    fontFamily: B.sans,
+                  }}
+                >
+                  For Lease
+                </span>
+              </div>
+            ) : null}
           </div>
 
           {/* Price pill */}
@@ -466,13 +489,7 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
 }
 
 // ─── Filter Bar ───────────────────────────────────────────────────────────────
-function FilterBar({
-  filters,
-  setFilter,
-  resetFilters,
-  typeCategories,
-  totalCount,
-}) {
+function FilterBar({ filters, setFilter, resetFilters, totalCount }) {
   const [keywordInput, setKeywordInput] = useState(filters.keyword);
   const debounceRef = useRef(null);
 
@@ -527,6 +544,13 @@ function FilterBar({
     />
   );
 
+  // Intent tabs
+  const intentTabs = [
+    { label: "For Sale", value: "sale" },
+    { label: "For Lease", value: "rent" },
+    { label: "All", value: "" },
+  ];
+
   return (
     <div
       style={{
@@ -538,7 +562,7 @@ function FilterBar({
         border: "1px solid rgba(212,175,55,0.15)",
       }}
     >
-      {/* Mode tabs */}
+      {/* Intent tabs */}
       <div
         style={{
           display: "flex",
@@ -548,23 +572,18 @@ function FilterBar({
           flexWrap: "wrap",
         }}
       >
-        {["For Sale", "For Rent", "Off-Plan"].map((badge, i) => {
-          const isActive =
-            (i === 0 && filters.badge === "Any Status") ||
-            filters.badge === badge;
+        {intentTabs.map(({ label, value }) => {
+          const isActive = filters.listingIntent === value;
           return (
             <button
-              key={badge}
-              onClick={() => setFilter("badge", i === 0 ? "Any Status" : badge)}
+              key={label}
+              onClick={() => setFilter("listingIntent", value)}
               style={{
                 fontFamily: B.sans,
                 fontSize: 11,
                 fontWeight: 700,
                 padding: "14px 20px",
                 color: isActive ? B.primary : B.muted,
-                borderBottom: isActive
-                  ? `2px solid ${B.primary}`
-                  : "2px solid transparent",
                 background: "transparent",
                 border: "none",
                 borderBottom: isActive
@@ -576,7 +595,7 @@ function FilterBar({
                 transition: "color 0.2s",
               }}
             >
-              {badge}
+              {label}
             </button>
           );
         })}
@@ -589,7 +608,7 @@ function FilterBar({
           }}
         >
           <span style={{ fontFamily: B.sans, fontSize: 12, color: B.muted }}>
-            {totalCount} {totalCount === 1 ? "property" : "properties"}
+            {totalCount} {totalCount === 1 ? "plot" : "plots"}
           </span>
           <button
             onClick={resetFilters}
@@ -691,7 +710,7 @@ function FilterBar({
           </div>
         </div>
 
-        {/* Type */}
+        {/* Land unit filter */}
         <div
           style={{
             flex: 1,
@@ -699,15 +718,20 @@ function FilterBar({
             padding: "16px 20px",
           }}
         >
-          {colLabel("Type")}
+          {colLabel("Unit")}
           <div style={{ position: "relative" }}>
             <select
               style={selectStyle}
-              value={filters.type}
-              onChange={(e) => setFilter("type", e.target.value)}
+              value={filters.landUnit || "All Units"}
+              onChange={(e) =>
+                setFilter(
+                  "landUnit",
+                  e.target.value === "All Units" ? "" : e.target.value,
+                )
+              }
             >
-              {typeCategories.map((t) => (
-                <option key={t}>{t}</option>
+              {LAND_UNIT_LABELS.map((u) => (
+                <option key={u}>{u}</option>
               ))}
             </select>
             {chevron}
@@ -740,7 +764,7 @@ function FilterBar({
         {/* Search CTA */}
         <button
           style={{
-            background: B.grad,
+            background: B.landGrad,
             color: B.white,
             border: "none",
             padding: "0 32px",
@@ -765,7 +789,7 @@ function FilterBar({
         </button>
       </div>
 
-      {/* Type pill tabs */}
+      {/* Price range row */}
       <div
         style={{
           display: "flex",
@@ -786,48 +810,56 @@ function FilterBar({
             fontWeight: 700,
           }}
         >
-          Filter:
+          Price:
         </span>
-        {typeCategories.map((t) => (
-          <button
-            key={t}
-            onClick={() => setFilter("type", t)}
-            style={{
-              fontFamily: B.sans,
-              fontSize: 12,
-              fontWeight: t === filters.type ? 700 : 400,
-              padding: "6px 16px",
-              borderRadius: 99,
-              border:
-                t === filters.type
-                  ? "none"
-                  : `1.5px solid rgba(212,175,55,0.40)`,
-              background: t === filters.type ? B.grad : "transparent",
-              color: t === filters.type ? B.white : B.muted,
-              cursor: "pointer",
-              transition: "all 0.22s",
-              boxShadow:
-                t === filters.type ? "0 4px 16px rgba(10,17,114,0.20)" : "none",
-            }}
-          >
-            {t}
-          </button>
-        ))}
+        {[
+          { label: "Any", min: "", max: "" },
+          { label: "Under 5M", min: "", max: "5000000" },
+          { label: "5M – 20M", min: "5000000", max: "20000000" },
+          { label: "20M – 50M", min: "20000000", max: "50000000" },
+          { label: "50M+", min: "50000000", max: "" },
+        ].map(({ label, min, max }) => {
+          const isActive = filters.minPrice === min && filters.maxPrice === max;
+          return (
+            <button
+              key={label}
+              onClick={() => {
+                setFilter("minPrice", min);
+                setFilter("maxPrice", max);
+              }}
+              style={{
+                fontFamily: B.sans,
+                fontSize: 12,
+                fontWeight: isActive ? 700 : 400,
+                padding: "6px 16px",
+                borderRadius: 99,
+                border: isActive ? "none" : `1.5px solid rgba(212,175,55,0.40)`,
+                background: isActive ? B.landGrad : "transparent",
+                color: isActive ? B.white : B.muted,
+                cursor: "pointer",
+                transition: "all 0.22s",
+                boxShadow: isActive ? "0 4px 16px rgba(45,90,61,0.25)" : "none",
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function Listings() {
+export default function Lands() {
   const [heroBg, setHeroBg] = useState(0);
   const [heroOffset, setHeroOffset] = useState(0);
   const [activeProperty, setActiveProperty] = useState(null);
   const heroRef = useRef(null);
 
+  // Lock type to "Land/Plot" — all other filters work normally
   const {
     properties,
-    typeCategories,
     loading,
     loadingMore,
     error,
@@ -838,7 +870,12 @@ export default function Listings() {
     loadMore,
     refetch,
     totalCount,
-  } = useListings({ limit: 12 });
+  } = useListings({ limit: 12, defaultFilters: { type: "Land/Plot" } });
+
+  // Ensure type never drifts from Land/Plot
+  useEffect(() => {
+    if (filters.type !== "Land/Plot") setFilter("type", "Land/Plot");
+  }, []);
 
   /* Hero parallax */
   useEffect(() => {
@@ -861,12 +898,18 @@ export default function Listings() {
     return () => clearInterval(t);
   }, []);
 
+  const handleReset = () => {
+    resetFilters();
+    // Re-lock type after reset
+    setTimeout(() => setFilter("type", "Land/Plot"), 0);
+  };
+
   return (
     <div style={{ background: B.white, minHeight: "100vh" }}>
       <style>{`
         @keyframes heroFadeIn { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
         @keyframes shimmer { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
-        .listings-hero-text { animation: heroFadeIn 0.9s cubic-bezier(0.22,1,0.36,1) forwards; }
+        .lands-hero-text { animation: heroFadeIn 0.9s cubic-bezier(0.22,1,0.36,1) forwards; }
         .masonry-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
@@ -885,6 +928,8 @@ export default function Listings() {
           .filter-main-row { flex-direction: column !important; }
           .filter-main-row > * { border-right: none !important; border-bottom: 1px solid ${B.beige}; }
         }
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .spin{animation:spin .8s linear infinite;display:inline-block}
       `}</style>
 
       {/* ── Hero ── */}
@@ -921,13 +966,13 @@ export default function Listings() {
           </div>
         ))}
 
-        {/* Navy overlay — toned down */}
+        {/* Dark green overlay — earthy feel for land */}
         <div
           style={{
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(110deg, rgba(10,17,114,0.72) 0%, rgba(26,58,92,0.52) 45%, rgba(10,17,114,0.18) 100%)",
+              "linear-gradient(110deg, rgba(45,90,61,0.78) 0%, rgba(74,124,89,0.52) 45%, rgba(45,90,61,0.20) 100%)",
           }}
         />
 
@@ -944,7 +989,7 @@ export default function Listings() {
 
         {/* Hero text */}
         <div
-          className="listings-hero-text"
+          className="lands-hero-text"
           style={{
             position: "absolute",
             inset: 0,
@@ -982,12 +1027,26 @@ export default function Listings() {
               style={{
                 fontFamily: B.sans,
                 fontSize: 11,
+                color: "rgba(212,175,55,0.7)",
+                letterSpacing: "0.2em",
+                textTransform: "uppercase",
+              }}
+            >
+              Properties
+            </span>
+            <span style={{ color: "rgba(212,175,55,0.4)", fontSize: 12 }}>
+              ›
+            </span>
+            <span
+              style={{
+                fontFamily: B.sans,
+                fontSize: 11,
                 color: B.accent,
                 letterSpacing: "0.2em",
                 textTransform: "uppercase",
               }}
             >
-              All Listings
+              Land &amp; Plots
             </span>
           </div>
 
@@ -1017,7 +1076,7 @@ export default function Listings() {
                 textTransform: "uppercase",
               }}
             >
-              Slendor Holdings
+              Splendor Holdings
             </span>
           </div>
 
@@ -1032,7 +1091,7 @@ export default function Listings() {
               textShadow: "0 4px 32px rgba(10,17,114,0.4)",
             }}
           >
-            All Properties
+            Land &amp; Plots
           </h1>
 
           <p
@@ -1041,13 +1100,13 @@ export default function Listings() {
               fontSize: "clamp(1rem, 1.8vw, 1.35rem)",
               fontStyle: "italic",
               color: "rgba(212,175,55,0.90)",
-              maxWidth: 480,
+              maxWidth: 520,
               lineHeight: 1.7,
               textShadow: "0 2px 16px rgba(10,17,114,0.3)",
             }}
           >
-            Browse our curated collection of Kenya's finest homes, villas,
-            apartments, and land
+            Prime parcels, titled plots, and development land across Kenya's
+            fastest-growing counties
           </p>
 
           {/* Stats */}
@@ -1060,9 +1119,9 @@ export default function Listings() {
             }}
           >
             {[
-              { num: String(totalCount), label: "Active Listings" },
-              { num: "KES 5B+", label: "Properties Sold" },
+              { num: String(totalCount), label: "Available Plots" },
               { num: "7", label: "Counties" },
+              { num: "Titled", label: "Guaranteed" },
             ].map((s, i) => (
               <div
                 key={i}
@@ -1154,8 +1213,7 @@ export default function Listings() {
           <FilterBar
             filters={filters}
             setFilter={setFilter}
-            resetFilters={resetFilters}
-            typeCategories={typeCategories}
+            resetFilters={handleReset}
             totalCount={totalCount}
           />
         </div>
@@ -1200,6 +1258,12 @@ export default function Listings() {
         {/* Empty */}
         {!error && !loading && properties.length === 0 && (
           <div style={{ textAlign: "center", padding: "80px 0" }}>
+            <TreePine
+              size={48}
+              color={B.landAccent}
+              strokeWidth={1.2}
+              style={{ marginBottom: 16 }}
+            />
             <div
               style={{
                 fontFamily: B.serif,
@@ -1208,7 +1272,7 @@ export default function Listings() {
                 marginBottom: 12,
               }}
             >
-              No properties found
+              No plots found
             </div>
             <p
               style={{
@@ -1221,12 +1285,12 @@ export default function Listings() {
               Try adjusting your filters above
             </p>
             <button
-              onClick={resetFilters}
+              onClick={handleReset}
               style={{
                 padding: "10px 28px",
                 borderRadius: 99,
                 border: "none",
-                background: B.grad,
+                background: B.landGrad,
                 color: B.white,
                 fontFamily: B.sans,
                 fontSize: 13,
@@ -1259,7 +1323,7 @@ export default function Listings() {
               : properties.map((p, i) => {
                   const span = spanPattern[i % spanPattern.length];
                   return (
-                    <ListingCard
+                    <LandCard
                       key={p._id}
                       property={p}
                       spanCol={span.col}
@@ -1312,12 +1376,20 @@ export default function Listings() {
                   <Loader2 size={14} className="spin" /> Loading…
                 </>
               ) : (
-                "Load More Properties"
+                "Load More Plots"
               )}
             </button>
           </div>
         )}
       </div>
+
+      {/* Action modal */}
+      {activeProperty && (
+        <ActionModal
+          property={activeProperty}
+          onClose={() => setActiveProperty(null)}
+        />
+      )}
     </div>
   );
 }

@@ -10,6 +10,8 @@ import Contact from "./pages/Contact";
 import About from "./pages/About";
 import Auth from "./pages/Auth";
 import Services from "./pages/Services";
+import Projects from "./pages/Projects";
+import Lands from "./pages/Lands";
 
 function App() {
   const location = useLocation();
@@ -27,6 +29,8 @@ function App() {
         <Route path="/about-us" element={<About />} />
         <Route path="/authentication" element={<Auth />} />
         <Route path="/services" element={<Services />} />
+        <Route path="/projects" element={<Projects />} />
+        <Route path="/looking-for-a-piece-of-land"element={<Lands />} />
       </Routes>
       {!isDashboard && <Footer />}
     </>

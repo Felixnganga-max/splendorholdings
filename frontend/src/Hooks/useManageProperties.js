@@ -2,13 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 
 const API_BASE = "https://splendorholdings-2v47.vercel.app/api/v1";
 const getToken = () => localStorage.getItem("accessToken");
-
-const authHeaders = () => ({
-  Authorization: `Bearer ${getToken()}`,
-});
+const authHeaders = () => ({ Authorization: `Bearer ${getToken()}` });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const formatKES = (amount) => {
+export const formatKES = (amount) => {
   if (!amount && amount !== 0) return "";
   if (amount >= 1_000_000) {
     const m = amount / 1_000_000;
@@ -41,9 +38,13 @@ export function useManageProperties() {
     type: "",
     badge: "",
     status: "",
-    sort: "-createdAt",
+    sort: "-isFeatured -createdAt",
     isFeatured: "",
     isSoldOut: "",
+    listingIntent: "",
+    listingMode: "",
+    minPrice: "",
+    maxPrice: "",
   });
 
   const [listLoading, setListLoading] = useState(false);
@@ -71,7 +72,7 @@ export function useManageProperties() {
           setBadges(cats.filter((c) => c.kind === "badge").map((c) => c.label));
         }
       } catch {
-        // fall through — UI will show empty pills, not crash
+        // fall through
       } finally {
         setCategoriesLoading(false);
       }
@@ -88,7 +89,7 @@ export function useManageProperties() {
         page,
         limit,
         sort: filters.sort,
-        includeHidden: "true", // admin sees everything
+        includeHidden: "true",
       });
       if (filters.search) params.set("search", filters.search);
       if (filters.type) params.set("type", filters.type);
@@ -96,6 +97,11 @@ export function useManageProperties() {
       if (filters.status) params.set("status", filters.status);
       if (filters.isFeatured) params.set("isFeatured", filters.isFeatured);
       if (filters.isSoldOut) params.set("isSoldOut", filters.isSoldOut);
+      if (filters.listingIntent)
+        params.set("listingIntent", filters.listingIntent);
+      if (filters.listingMode) params.set("listingMode", filters.listingMode);
+      if (filters.minPrice) params.set("minPrice", filters.minPrice);
+      if (filters.maxPrice) params.set("maxPrice", filters.maxPrice);
 
       const res = await fetch(`${API_BASE}/properties?${params}`, {
         headers: authHeaders(),
@@ -124,9 +130,8 @@ export function useManageProperties() {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
-  // ── Quick toggles (optimistic update) ──────────────────────────────────────
+  // ── Quick toggles ───────────────────────────────────────────────────────────
   const toggleVisibility = async (property) => {
-    // Optimistic
     setProperties((prev) =>
       prev.map((p) =>
         p._id === property._id ? { ...p, isVisible: !p.isVisible } : p,
@@ -149,7 +154,6 @@ export function useManageProperties() {
         ),
       );
     } catch {
-      // revert on failure
       setProperties((prev) =>
         prev.map((p) =>
           p._id === property._id ? { ...p, isVisible: property.isVisible } : p,
@@ -200,7 +204,7 @@ export function useManageProperties() {
   const [editSuccess, setEditSuccess] = useState(false);
   const [featureInput, setFeatureInput] = useState("");
 
-  // Derived: live pricing preview
+  // Live sale pricing preview
   const editPricingPreview = (() => {
     const { price, discountPercent, offerPrice, offerExpiresAt, offerMode } =
       editForm;
@@ -216,32 +220,55 @@ export function useManageProperties() {
 
   const openEdit = (property) => {
     const p = property.pricing || {};
-    // Determine which offer mode is active
+    const rp = property.rentalPricing || {};
+    const la = property.landArea || {};
+
     let offerMode = "none";
     if (p.discountPercent != null) offerMode = "percent";
     else if (p.offerPrice != null) offerMode = "fixed";
 
     setEditing(property);
     setEditFormState({
+      // Identity
       name: property.name || "",
+      buildingName: property.buildingName || "",
       location: property.location || "",
-      price: p.original ?? property.price ?? "",
-      priceLabel: p.label || property.priceLabel || "",
-      beds: property.beds ?? "",
-      baths: property.baths ?? "",
-      area: property.area ?? "",
-      type: property.type || "",
-      badge: property.badge || "",
-      description: property.description || "",
-      features: property.features || [],
-      status: property.status || "active",
-      // Pricing offer
-      offerMode, // "none" | "percent" | "fixed"
+
+      // Listing
+      listingMode: property.listingMode || "whole",
+      listingIntent: property.listingIntent || "sale",
+
+      // Sale pricing
+      price: p.original ?? "",
+      priceLabel: p.label || "",
+      offerMode,
       discountPercent: p.discountPercent ?? "",
       offerPrice: p.offerPrice ?? "",
       offerExpiresAt: p.offerExpiresAt
         ? new Date(p.offerExpiresAt).toISOString().split("T")[0]
         : "",
+
+      // Rental pricing
+      rentPerDay: rp.rentPerDay ?? "",
+      rentPerMonth: rp.rentPerMonth ?? "",
+      rentalLabel: rp.label || "",
+
+      // Land area
+      landAreaValue: la.value ?? "",
+      landAreaUnit: la.unit || "sqm",
+
+      // Specs
+      beds: property.beds ?? "",
+      baths: property.baths ?? "",
+      area: property.area ?? "",
+
+      // Classification
+      type: property.type || "",
+      badge: property.badge || "",
+      status: property.status || "active",
+      description: property.description || "",
+      features: property.features || [],
+
       // Toggles
       isVisible: property.isVisible ?? true,
       isSoldOut: property.isSoldOut ?? false,
@@ -321,53 +348,70 @@ export function useManageProperties() {
     if (!editing) return;
     setEditLoading(true);
     setEditError("");
+
     try {
       const body = new FormData();
+      const f = editForm;
 
-      // Core scalar fields
-      const scalars = [
-        "name",
-        "location",
-        "beds",
-        "baths",
-        "area",
-        "type",
-        "badge",
-        "description",
-        "status",
-      ];
-      scalars.forEach((f) => {
-        if (editForm[f] !== undefined && editForm[f] !== "")
-          body.append(f, editForm[f]);
-      });
+      // ── Identity
+      body.append("name", f.name);
+      body.append("location", f.location);
+      if (f.buildingName) body.append("buildingName", f.buildingName);
+      else body.append("buildingName", ""); // allow clearing
 
-      // Pricing
-      body.append("price", editForm.price);
-      if (editForm.priceLabel) body.append("priceLabel", editForm.priceLabel);
+      // ── Listing
+      body.append("listingMode", f.listingMode);
+      body.append("listingIntent", f.listingIntent);
 
-      if (editForm.offerMode === "percent" && editForm.discountPercent !== "") {
-        body.append("discountPercent", editForm.discountPercent);
-        if (editForm.offerExpiresAt)
-          body.append("offerExpiresAt", editForm.offerExpiresAt);
-      } else if (editForm.offerMode === "fixed" && editForm.offerPrice !== "") {
-        body.append("offerPrice", editForm.offerPrice);
-        if (editForm.offerExpiresAt)
-          body.append("offerExpiresAt", editForm.offerExpiresAt);
-      } else if (editForm.offerMode === "none") {
-        body.append("clearOffer", "true");
+      // ── Sale pricing
+      const showSale = f.listingIntent === "sale" || f.listingIntent === "both";
+      if (showSale && f.price !== "") {
+        body.append("price", f.price);
+        if (f.priceLabel) body.append("priceLabel", f.priceLabel);
+        if (f.offerMode === "percent" && f.discountPercent !== "") {
+          body.append("discountPercent", f.discountPercent);
+          if (f.offerExpiresAt) body.append("offerExpiresAt", f.offerExpiresAt);
+        } else if (f.offerMode === "fixed" && f.offerPrice !== "") {
+          body.append("offerPrice", f.offerPrice);
+          if (f.offerExpiresAt) body.append("offerExpiresAt", f.offerExpiresAt);
+        } else if (f.offerMode === "none") {
+          body.append("clearOffer", "true");
+        }
       }
 
-      // Toggles
-      body.append("isVisible", editForm.isVisible);
-      body.append("isSoldOut", editForm.isSoldOut);
-      body.append("isFeatured", editForm.isFeatured);
-      if (editForm.featuredUntil)
-        body.append("featuredUntil", editForm.featuredUntil);
+      // ── Rental pricing
+      const showRent = f.listingIntent === "rent" || f.listingIntent === "both";
+      if (showRent) {
+        if (f.rentPerDay !== "") body.append("rentPerDay", f.rentPerDay);
+        if (f.rentPerMonth !== "") body.append("rentPerMonth", f.rentPerMonth);
+        if (f.rentalLabel) body.append("rentalLabel", f.rentalLabel);
+      }
 
-      // Features — send as features not features[]
-      editForm.features.forEach((ft) => body.append("features", ft));
+      // ── Land area
+      if (f.landAreaValue !== "") {
+        body.append("landAreaValue", f.landAreaValue);
+        body.append("landAreaUnit", f.landAreaUnit);
+      }
 
-      // New images
+      // ── Specs
+      if (f.beds !== "") body.append("beds", f.beds);
+      if (f.baths !== "") body.append("baths", f.baths);
+      if (f.area !== "") body.append("area", f.area);
+
+      // ── Classification
+      body.append("type", f.type);
+      if (f.badge) body.append("badge", f.badge);
+      body.append("status", f.status);
+      if (f.description) body.append("description", f.description);
+      f.features.forEach((ft) => body.append("features", ft));
+
+      // ── Toggles
+      body.append("isVisible", f.isVisible);
+      body.append("isSoldOut", f.isSoldOut);
+      body.append("isFeatured", f.isFeatured);
+      if (f.featuredUntil) body.append("featuredUntil", f.featuredUntil);
+
+      // ── New images
       editImages.forEach(({ file }) => body.append("images", file));
 
       const res = await fetch(`${API_BASE}/properties/${editing._id}`, {

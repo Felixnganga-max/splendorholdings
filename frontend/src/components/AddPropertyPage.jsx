@@ -31,6 +31,11 @@ const PROPERTY_TYPES = [
   "Maisonette",
   "Land/Plot",
   "Commercial",
+  "Condos",
+  "Project",
+  "Pent House",
+  "Duplex House",
+  "Triplex House",
 ];
 const BADGES = ["Featured", "New Listing", "For Sale", "For Rent", "Off-Plan"];
 const LAND_UNITS = [

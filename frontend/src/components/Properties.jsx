@@ -26,11 +26,23 @@ import {
   CheckCircle,
   Upload,
   ArrowLeft,
+  Building2,
+  Layers,
+  TrendingUp,
+  Ruler,
+  RefreshCw,
+  Filter,
+  ChevronDown,
 } from "lucide-react";
 import { useManageProperties } from "../Hooks/useManageProperties";
 import { useNavigate } from "react-router-dom";
 
+// ── Constants ──────────────────────────────────────────────────────────────────
 const STATUSES = ["active", "draft", "archived", "sold", "rented"];
+const LISTING_MODES = ["whole", "unit"];
+const LISTING_INTENTS = ["sale", "rent", "both"];
+const LAND_UNITS = ["acres", "hectares", "sqm", "sqft"];
+
 const SORTS = [
   { label: "Newest", value: "-createdAt" },
   { label: "Oldest", value: "createdAt" },
@@ -40,13 +52,22 @@ const SORTS = [
   { label: "Featured", value: "-isFeatured -createdAt" },
 ];
 
-// ── Design tokens ─────────────────────────────────────────────────────────────
-const PURPLE = "#7B2D8B";
-const DPURPLE = "#4A1060";
+// ── Tokens ─────────────────────────────────────────────────────────────────────
+const P = "#7B2D8B";
+const DP = "#4A1060";
 const CREAM = "#fdf8f3";
 const BORDER = "#f0e6d8";
 const MUTED = "#7a6555";
 const LABEL = "#b8a090";
+const AMBER = "#b45309";
+
+// ── Style helpers ──────────────────────────────────────────────────────────────
+const card = {
+  background: "#fff",
+  borderRadius: 20,
+  border: `1.5px solid ${BORDER}`,
+  padding: 24,
+};
 
 const inputBase = {
   width: "100%",
@@ -59,17 +80,13 @@ const inputBase = {
   color: "#1a0f00",
   outline: "none",
   boxSizing: "border-box",
+  transition: "border 0.2s",
 };
 
-const card = {
-  background: "#fff",
-  borderRadius: 20,
-  border: `1.5px solid ${BORDER}`,
-  padding: 24,
-};
+const editBase = { ...inputBase, padding: "11px 14px", borderRadius: 12 };
 
-// ── Shared primitives ─────────────────────────────────────────────────────────
-const Field = ({ label, children, hint }) => (
+// ── Primitives ─────────────────────────────────────────────────────────────────
+const Field = ({ label, children, hint, required }) => (
   <div>
     <label
       style={{
@@ -84,6 +101,7 @@ const Field = ({ label, children, hint }) => (
       }}
     >
       {label}
+      {required && <span style={{ color: "#dc2626", marginLeft: 3 }}>*</span>}
     </label>
     {children}
     {hint && (
@@ -101,19 +119,8 @@ const Field = ({ label, children, hint }) => (
   </div>
 );
 
-const editInputBase = {
-  width: "100%",
-  padding: "12px 14px",
-  borderRadius: 12,
-  border: `1.5px solid ${BORDER}`,
-  background: CREAM,
-  fontFamily: "'Jost', sans-serif",
-  fontSize: 13,
-  color: "#1a0f00",
-  outline: "none",
-  boxSizing: "border-box",
-  transition: "border 0.2s",
-};
+const focus = (e) => (e.target.style.borderColor = "#c2884a");
+const blur = (e) => (e.target.style.borderColor = BORDER);
 
 const Input = ({ icon: Icon, ...props }) => (
   <div style={{ position: "relative" }}>
@@ -133,30 +140,64 @@ const Input = ({ icon: Icon, ...props }) => (
     <input
       {...props}
       style={{
-        ...editInputBase,
+        ...editBase,
         ...(Icon ? { paddingLeft: 38 } : {}),
         ...props.style,
       }}
-      onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
-      onBlur={(e) => (e.target.style.borderColor = BORDER)}
+      onFocus={focus}
+      onBlur={blur}
     />
   </div>
 );
 
+const EditSelect = ({ icon: Icon, children, ...props }) => (
+  <div style={{ position: "relative" }}>
+    {Icon && (
+      <Icon
+        size={14}
+        color="#c2884a"
+        style={{
+          position: "absolute",
+          left: 14,
+          top: "50%",
+          transform: "translateY(-50%)",
+          pointerEvents: "none",
+          zIndex: 1,
+        }}
+      />
+    )}
+    <select
+      {...props}
+      style={{
+        ...editBase,
+        paddingRight: 32,
+        ...(Icon ? { paddingLeft: 38 } : {}),
+        cursor: "pointer",
+        appearance: "none",
+        ...props.style,
+      }}
+      onFocus={focus}
+      onBlur={blur}
+    >
+      {children}
+    </select>
+  </div>
+);
+
 const StatusPill = ({ status }) => {
-  const map = {
-    active: { bg: "#d1fae5", color: "#065f46" },
-    draft: { bg: "#fef3c7", color: "#92400e" },
-    archived: { bg: "#f3f4f6", color: "#4b5563" },
-    sold: { bg: "#ede9fe", color: "#5b21b6" },
-    rented: { bg: "#dbeafe", color: "#1e40af" },
+  const m = {
+    active: { bg: "#d1fae5", c: "#065f46" },
+    draft: { bg: "#fef3c7", c: "#92400e" },
+    archived: { bg: "#f3f4f6", c: "#4b5563" },
+    sold: { bg: "#ede9fe", c: "#5b21b6" },
+    rented: { bg: "#dbeafe", c: "#1e40af" },
   };
-  const s = map[status] || map.draft;
+  const s = m[status] || m.draft;
   return (
     <span
       style={{
         background: s.bg,
-        color: s.color,
+        color: s.c,
         fontSize: 10,
         fontWeight: 600,
         fontFamily: "'Jost',sans-serif",
@@ -171,6 +212,32 @@ const StatusPill = ({ status }) => {
   );
 };
 
+const IntentBadge = ({ intent }) => {
+  const m = {
+    sale: { bg: "#fef3c7", c: "#92400e" },
+    rent: { bg: "#dbeafe", c: "#1e40af" },
+    both: { bg: "#f3e8ff", c: "#6b21a8" },
+  };
+  const s = m[intent] || m.sale;
+  return (
+    <span
+      style={{
+        background: s.bg,
+        color: s.c,
+        fontSize: 9,
+        fontWeight: 700,
+        fontFamily: "'Jost',sans-serif",
+        padding: "2px 8px",
+        borderRadius: 99,
+        textTransform: "uppercase",
+        letterSpacing: "0.06em",
+      }}
+    >
+      {intent}
+    </span>
+  );
+};
+
 const IconBtn = ({ onClick, title, children, danger, active, activeColor }) => (
   <button
     onClick={onClick}
@@ -180,11 +247,7 @@ const IconBtn = ({ onClick, title, children, danger, active, activeColor }) => (
       height: 32,
       borderRadius: 8,
       border: `1.5px solid ${danger ? "#fca5a5" : BORDER}`,
-      background: active
-        ? activeColor || PURPLE + "18"
-        : danger
-          ? "#fff5f5"
-          : CREAM,
+      background: active ? activeColor || P + "18" : danger ? "#fff5f5" : CREAM,
       cursor: "pointer",
       display: "flex",
       alignItems: "center",
@@ -192,14 +255,14 @@ const IconBtn = ({ onClick, title, children, danger, active, activeColor }) => (
       transition: "all 0.15s",
       flexShrink: 0,
     }}
-    onMouseEnter={(e) => {
-      e.currentTarget.style.borderColor = danger
+    onMouseEnter={(e) =>
+      (e.currentTarget.style.borderColor = danger
         ? "#dc2626"
-        : activeColor || PURPLE;
-    }}
-    onMouseLeave={(e) => {
-      e.currentTarget.style.borderColor = danger ? "#fca5a5" : BORDER;
-    }}
+        : activeColor || P)
+    }
+    onMouseLeave={(e) =>
+      (e.currentTarget.style.borderColor = danger ? "#fca5a5" : BORDER)
+    }
   >
     {children}
   </button>
@@ -229,7 +292,7 @@ const Backdrop = ({ children, onClose }) => (
   </div>
 );
 
-const Toggle = ({ checked, onChange, label, activeColor = PURPLE }) => (
+const Toggle = ({ checked, onChange, label, activeColor = P }) => (
   <label
     style={{
       display: "flex",
@@ -278,46 +341,122 @@ const Toggle = ({ checked, onChange, label, activeColor = PURPLE }) => (
   </label>
 );
 
-const OrDivider = () => (
+const SectionHead = ({ icon: Icon, children }) => (
   <div
-    style={{ display: "flex", alignItems: "center", gap: 10, margin: "2px 0" }}
+    style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20 }}
   >
-    <div style={{ flex: 1, height: 1, background: BORDER }} />
-    <span
+    {Icon && (
+      <div
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: 8,
+          background: `${P}14`,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+        }}
+      >
+        <Icon size={13} color={P} />
+      </div>
+    )}
+    <h3
       style={{
-        fontFamily: "'Jost',sans-serif",
-        fontSize: 10,
-        color: "#c8b09a",
-        letterSpacing: "0.1em",
-        textTransform: "uppercase",
+        fontFamily: "'Cormorant Garamond',serif",
+        fontSize: 18,
+        fontWeight: 700,
+        color: "#1a0f00",
+        margin: 0,
       }}
     >
-      or
-    </span>
-    <div style={{ flex: 1, height: 1, background: BORDER }} />
+      {children}
+    </h3>
   </div>
 );
 
-const SectionTitle = ({ children }) => (
-  <h3
-    style={{
-      fontFamily: "'Cormorant Garamond',serif",
-      fontSize: 18,
-      fontWeight: 700,
-      color: "#1a0f00",
-      marginBottom: 20,
-    }}
-  >
-    {children}
-  </h3>
+const Pills = ({ options, value, onChange, colorFn }) => (
+  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+    {options.map((opt) => {
+      const active = value === opt;
+      const bg = active
+        ? colorFn?.(opt) || `linear-gradient(135deg,${P},${DP})`
+        : CREAM;
+      return (
+        <button
+          key={opt}
+          onClick={() => onChange(opt)}
+          style={{
+            fontFamily: "'Jost',sans-serif",
+            fontSize: 12,
+            fontWeight: active ? 600 : 400,
+            padding: "7px 14px",
+            borderRadius: 99,
+            border: active ? "none" : `1.5px solid ${BORDER}`,
+            background: bg,
+            color: active ? "#fff" : MUTED,
+            cursor: "pointer",
+            transition: "all 0.2s",
+          }}
+        >
+          {opt}
+        </button>
+      );
+    })}
+  </div>
 );
+
+// ─── Pricing preview widget ───────────────────────────────────────────────────
+const PricingPreview = ({ preview, formatKES }) => {
+  if (!preview || preview.savings <= 0) return null;
+  return (
+    <div
+      style={{
+        background: "#fff",
+        borderRadius: 10,
+        padding: "10px 14px",
+        border: "1.5px solid #6ee7b7",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+      }}
+    >
+      <span
+        style={{ fontFamily: "'Jost',sans-serif", fontSize: 12, color: MUTED }}
+      >
+        Effective price
+      </span>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+        <span
+          style={{
+            fontFamily: "'Jost',sans-serif",
+            fontSize: 14,
+            fontWeight: 700,
+            color: "#059669",
+          }}
+        >
+          {formatKES(preview.effective)}
+        </span>
+        <span
+          style={{
+            fontFamily: "'Jost',sans-serif",
+            fontSize: 11,
+            color: "#dc2626",
+            fontWeight: 600,
+          }}
+        >
+          {preview.savingsPct}% off
+        </span>
+      </div>
+    </div>
+  );
+};
 
 // ════════════════════════════════════════════════════════════════════════════
 // EDIT VIEW
 // ════════════════════════════════════════════════════════════════════════════
 function EditView({ onBack, hook }) {
   const fileEditRef = useRef(null);
-
   const {
     editing,
     editForm,
@@ -328,7 +467,6 @@ function EditView({ onBack, hook }) {
     editPricingPreview,
     featureInput,
     setFeatureInput,
-    closeEdit,
     setEditField,
     setEditDirect,
     addEditImages,
@@ -344,19 +482,25 @@ function EditView({ onBack, hook }) {
 
   if (!editing) return null;
 
+  const offerMode = editForm.offerMode || "none";
+  const intent = editForm.listingIntent || "sale";
+  const mode = editForm.listingMode || "whole";
+  const showSale = intent === "sale" || intent === "both";
+  const showRent = intent === "rent" || intent === "both";
+
   const handleDrop = (e) => {
     e.preventDefault();
     addEditImages(e.dataTransfer.files);
   };
-  const handleFileInput = (e) => {
+  const handleFile = (e) => {
     addEditImages(e.target.files);
     e.target.value = "";
   };
 
-  const offerMode = editForm.offerMode || "none";
+  const intentColor = (i) => ({ sale: "#b45309", rent: "#1e40af", both: P })[i];
 
   return (
-    <div style={{ padding: "36px 40px", maxWidth: 960, margin: "0 auto" }}>
+    <div style={{ padding: "36px 40px", maxWidth: 1020, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ marginBottom: 32 }}>
         <button
@@ -381,7 +525,7 @@ function EditView({ onBack, hook }) {
           style={{
             fontFamily: "'Jost',sans-serif",
             fontSize: 12,
-            color: "#b45309",
+            color: AMBER,
             letterSpacing: "0.2em",
             textTransform: "uppercase",
             fontWeight: 500,
@@ -390,19 +534,22 @@ function EditView({ onBack, hook }) {
         >
           Property Management
         </p>
-        <h1
-          style={{
-            fontFamily: "'Cormorant Garamond',serif",
-            fontSize: "clamp(1.8rem,3vw,2.6rem)",
-            fontWeight: 700,
-            color: "#1a0f00",
-          }}
-        >
-          Edit: {editing.name}
-        </h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <h1
+            style={{
+              fontFamily: "'Cormorant Garamond',serif",
+              fontSize: "clamp(1.6rem,3vw,2.4rem)",
+              fontWeight: 700,
+              color: "#1a0f00",
+              margin: 0,
+            }}
+          >
+            {editing.displayName || editing.name}
+          </h1>
+          <IntentBadge intent={editing.listingIntent || "sale"} />
+        </div>
       </div>
 
-      {/* Success */}
       {editSuccess && (
         <div
           style={{
@@ -429,8 +576,6 @@ function EditView({ onBack, hook }) {
           </span>
         </div>
       )}
-
-      {/* Error */}
       {editError && (
         <div
           style={{
@@ -459,13 +604,11 @@ function EditView({ onBack, hook }) {
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 28 }}>
-        {/* ── LEFT COLUMN ── */}
+        {/* ── LEFT ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
           {/* Images */}
           <div style={card}>
-            <SectionTitle>Images</SectionTitle>
-
-            {/* Existing images */}
+            <SectionHead icon={Upload}>Images</SectionHead>
             {editing.images?.length > 0 && (
               <div style={{ marginBottom: 16 }}>
                 <p
@@ -483,7 +626,7 @@ function EditView({ onBack, hook }) {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(80px,1fr))",
+                    gridTemplateColumns: "repeat(auto-fill,minmax(78px,1fr))",
                     gap: 8,
                   }}
                 >
@@ -497,7 +640,7 @@ function EditView({ onBack, hook }) {
                         aspectRatio: "1",
                         border:
                           idx === 0
-                            ? `2px solid ${PURPLE}`
+                            ? `2px solid ${P}`
                             : "2px solid transparent",
                       }}
                     >
@@ -516,7 +659,7 @@ function EditView({ onBack, hook }) {
                             position: "absolute",
                             bottom: 4,
                             left: 4,
-                            background: PURPLE,
+                            background: P,
                             color: "#fff",
                             fontSize: 9,
                             fontWeight: 600,
@@ -552,8 +695,6 @@ function EditView({ onBack, hook }) {
                 </div>
               </div>
             )}
-
-            {/* Upload new images */}
             <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleDrop}
@@ -561,11 +702,11 @@ function EditView({ onBack, hook }) {
               style={{
                 border: "2px dashed #e8ddd2",
                 borderRadius: 14,
-                padding: "24px 20px",
+                padding: "20px",
                 textAlign: "center",
                 background: CREAM,
                 cursor: "pointer",
-                transition: "all 0.2s",
+                transition: "border-color 0.2s",
                 marginBottom: editImages.length ? 12 : 0,
               }}
               onMouseEnter={(e) =>
@@ -577,7 +718,7 @@ function EditView({ onBack, hook }) {
             >
               <Upload
                 size={16}
-                color={PURPLE}
+                color={P}
                 strokeWidth={1.8}
                 style={{ margin: "0 auto 8px", display: "block" }}
               />
@@ -588,8 +729,8 @@ function EditView({ onBack, hook }) {
                   color: MUTED,
                 }}
               >
-                Add more photos or{" "}
-                <span style={{ color: PURPLE, fontWeight: 600 }}>browse</span>
+                Add photos or{" "}
+                <span style={{ color: P, fontWeight: 600 }}>browse</span>
               </p>
               <input
                 ref={fileEditRef}
@@ -597,16 +738,14 @@ function EditView({ onBack, hook }) {
                 accept="image/jpeg,image/png,image/webp"
                 multiple
                 style={{ display: "none" }}
-                onChange={handleFileInput}
+                onChange={handleFile}
               />
             </div>
-
-            {/* New image previews */}
             {editImages.length > 0 && (
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(80px,1fr))",
+                  gridTemplateColumns: "repeat(auto-fill,minmax(78px,1fr))",
                   gap: 8,
                 }}
               >
@@ -671,19 +810,46 @@ function EditView({ onBack, hook }) {
             )}
           </div>
 
-          {/* Core details */}
+          {/* Identity */}
           <div style={card}>
-            <SectionTitle>Property Details</SectionTitle>
+            <SectionHead icon={Home}>Identity</SectionHead>
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              <Field label="Property Name">
+              <Field label="Property Name" required>
                 <Input
                   icon={Home}
                   value={editForm.name}
                   onChange={setEditField("name")}
-                  placeholder="e.g. Amalia Springs"
+                  placeholder="e.g. 2 Bedroom Apartment"
                 />
               </Field>
-              <Field label="Location">
+
+              <Field
+                label="Listing Mode"
+                hint="'Unit' = one apartment / floor inside a larger building"
+              >
+                <Pills
+                  options={LISTING_MODES}
+                  value={mode}
+                  onChange={(v) => setEditDirect("listingMode", v)}
+                />
+              </Field>
+
+              {mode === "unit" && (
+                <Field
+                  label="Building / Complex Name"
+                  required
+                  hint="e.g. Sunshine Apartments"
+                >
+                  <Input
+                    icon={Building2}
+                    value={editForm.buildingName || ""}
+                    onChange={setEditField("buildingName")}
+                    placeholder="e.g. Sunshine Apartments"
+                  />
+                </Field>
+              )}
+
+              <Field label="Location" required>
                 <Input
                   icon={MapPin}
                   value={editForm.location}
@@ -691,199 +857,288 @@ function EditView({ onBack, hook }) {
                   placeholder="e.g. Kiamiti Road, Nairobi"
                 />
               </Field>
+            </div>
+          </div>
 
-              {/* Base price */}
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: 12,
-                }}
+          {/* Pricing */}
+          <div style={card}>
+            <SectionHead icon={TrendingUp}>Pricing</SectionHead>
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              {/* Intent */}
+              <Field
+                label="Listing Intent"
+                hint="What you're offering on this property"
               >
-                <Field label="Price (KES)">
-                  <Input
-                    icon={DollarSign}
-                    value={editForm.price}
-                    onChange={setEditField("price")}
-                    type="number"
-                    min="0"
-                    placeholder="24500000"
-                  />
-                </Field>
-                <Field label="Price Label" hint="e.g. Per month">
-                  <Input
-                    icon={Tag}
-                    value={editForm.priceLabel}
-                    onChange={setEditField("priceLabel")}
-                    placeholder="Per month"
-                  />
-                </Field>
-              </div>
-
-              {/* Offer / Discount */}
-              <div
-                style={{
-                  background: "#fdf6ee",
-                  border: `1.5px solid ${BORDER}`,
-                  borderRadius: 14,
-                  padding: 16,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12,
-                }}
-              >
-                <p
-                  style={{
-                    fontFamily: "'Jost',sans-serif",
-                    fontSize: 11,
-                    fontWeight: 500,
-                    color: LABEL,
-                    letterSpacing: "0.12em",
-                    textTransform: "uppercase",
-                  }}
-                >
-                  Offer / Discount{" "}
-                  <span
-                    style={{
-                      fontWeight: 400,
-                      textTransform: "none",
-                      letterSpacing: 0,
-                      color: "#c8b09a",
-                    }}
-                  >
-                    — pick one
-                  </span>
-                </p>
-
-                {/* Mode selector */}
-                <div style={{ display: "flex", gap: 6 }}>
-                  {["none", "percent", "fixed"].map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setEditDirect("offerMode", m)}
-                      style={{
-                        fontFamily: "'Jost',sans-serif",
-                        fontSize: 11,
-                        fontWeight: offerMode === m ? 600 : 400,
-                        padding: "6px 14px",
-                        borderRadius: 99,
-                        border:
-                          offerMode === m ? "none" : `1.5px solid ${BORDER}`,
-                        background:
-                          offerMode === m
-                            ? m === "none"
-                              ? "#6b7280"
-                              : `linear-gradient(135deg,${PURPLE},${DPURPLE})`
-                            : CREAM,
-                        color: offerMode === m ? "#fff" : MUTED,
-                        cursor: "pointer",
-                        transition: "all 0.2s",
-                      }}
-                    >
-                      {m === "none"
-                        ? "No offer"
-                        : m === "percent"
-                          ? "% Discount"
-                          : "Fixed price"}
-                    </button>
-                  ))}
-                </div>
-
-                {offerMode === "percent" && (
-                  <Field label="Discount (%)" hint="0–99">
-                    <Input
-                      icon={Percent}
-                      value={editForm.discountPercent}
-                      onChange={setEditField("discountPercent")}
-                      type="number"
-                      min="0"
-                      max="99"
-                      placeholder="e.g. 10"
-                    />
-                  </Field>
-                )}
-
-                {offerMode === "fixed" && (
-                  <Field label="Fixed Offer Price (KES)">
-                    <Input
-                      icon={DollarSign}
-                      value={editForm.offerPrice}
-                      onChange={setEditField("offerPrice")}
-                      type="number"
-                      min="0"
-                      placeholder="e.g. 22000000"
-                    />
-                  </Field>
-                )}
-
-                {offerMode !== "none" && (
-                  <Field label="Offer Expires">
-                    <Input
-                      icon={Calendar}
-                      value={editForm.offerExpiresAt}
-                      onChange={setEditField("offerExpiresAt")}
-                      type="date"
-                    />
-                  </Field>
-                )}
-
-                {/* Live pricing preview */}
-                {editPricingPreview &&
-                  offerMode !== "none" &&
-                  editPricingPreview.savings > 0 && (
-                    <div
-                      style={{
-                        background: "#fff",
-                        borderRadius: 10,
-                        padding: "10px 14px",
-                        border: `1.5px solid #6ee7b7`,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <span
+                <div style={{ display: "flex", gap: 8 }}>
+                  {LISTING_INTENTS.map((i) => {
+                    const active = intent === i;
+                    return (
+                      <button
+                        key={i}
+                        onClick={() => setEditDirect("listingIntent", i)}
                         style={{
                           fontFamily: "'Jost',sans-serif",
                           fontSize: 12,
-                          color: MUTED,
+                          fontWeight: active ? 600 : 400,
+                          padding: "8px 16px",
+                          borderRadius: 99,
+                          border: active ? "none" : `1.5px solid ${BORDER}`,
+                          background: active ? intentColor(i) : CREAM,
+                          color: active ? "#fff" : MUTED,
+                          cursor: "pointer",
+                          transition: "all 0.2s",
+                          textTransform: "capitalize",
                         }}
                       >
-                        Effective price
-                      </span>
-                      <div
+                        {i}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+
+              {/* Sale pricing */}
+              {showSale && (
+                <div
+                  style={{
+                    background: "#fdf6ee",
+                    border: `1.5px solid ${BORDER}`,
+                    borderRadius: 14,
+                    padding: 16,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 14,
+                  }}
+                >
+                  <p
+                    style={{
+                      fontFamily: "'Jost',sans-serif",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: AMBER,
+                      letterSpacing: "0.12em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    For Sale
+                  </p>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 12,
+                    }}
+                  >
+                    <Field label="Sale Price (KES)" required>
+                      <Input
+                        icon={DollarSign}
+                        value={editForm.price}
+                        onChange={setEditField("price")}
+                        type="number"
+                        min="0"
+                        placeholder="24500000"
+                      />
+                    </Field>
+                    <Field label="Price Label" hint="e.g. Negotiable">
+                      <Input
+                        icon={Tag}
+                        value={editForm.priceLabel}
+                        onChange={setEditField("priceLabel")}
+                        placeholder="e.g. Negotiable"
+                      />
+                    </Field>
+                  </div>
+
+                  {/* Offer / Discount */}
+                  <div>
+                    <p
+                      style={{
+                        fontFamily: "'Jost',sans-serif",
+                        fontSize: 11,
+                        color: LABEL,
+                        letterSpacing: "0.1em",
+                        textTransform: "uppercase",
+                        marginBottom: 8,
+                      }}
+                    >
+                      Offer / Discount{" "}
+                      <span
                         style={{
-                          display: "flex",
-                          alignItems: "baseline",
-                          gap: 8,
+                          fontWeight: 400,
+                          textTransform: "none",
+                          letterSpacing: 0,
+                          color: "#c8b09a",
                         }}
                       >
-                        <span
-                          style={{
-                            fontFamily: "'Jost',sans-serif",
-                            fontSize: 14,
-                            fontWeight: 700,
-                            color: "#059669",
-                          }}
-                        >
-                          {formatKES(editPricingPreview.effective)}
-                        </span>
-                        <span
+                        — pick one
+                      </span>
+                    </p>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                      {["none", "percent", "fixed"].map((m) => (
+                        <button
+                          key={m}
+                          onClick={() => setEditDirect("offerMode", m)}
                           style={{
                             fontFamily: "'Jost',sans-serif",
                             fontSize: 11,
-                            color: "#dc2626",
-                            fontWeight: 600,
+                            fontWeight: offerMode === m ? 600 : 400,
+                            padding: "6px 14px",
+                            borderRadius: 99,
+                            border:
+                              offerMode === m
+                                ? "none"
+                                : `1.5px solid ${BORDER}`,
+                            background:
+                              offerMode === m
+                                ? m === "none"
+                                  ? "#6b7280"
+                                  : `linear-gradient(135deg,${P},${DP})`
+                                : CREAM,
+                            color: offerMode === m ? "#fff" : MUTED,
+                            cursor: "pointer",
+                            transition: "all 0.2s",
                           }}
                         >
-                          {editPricingPreview.savingsPct}% off
-                        </span>
-                      </div>
+                          {m === "none"
+                            ? "No offer"
+                            : m === "percent"
+                              ? "% Discount"
+                              : "Fixed price"}
+                        </button>
+                      ))}
                     </div>
-                  )}
-              </div>
+                    {offerMode === "percent" && (
+                      <Field label="Discount (%)" hint="0–99">
+                        <Input
+                          icon={Percent}
+                          value={editForm.discountPercent}
+                          onChange={setEditField("discountPercent")}
+                          type="number"
+                          min="0"
+                          max="99"
+                          placeholder="10"
+                        />
+                      </Field>
+                    )}
+                    {offerMode === "fixed" && (
+                      <Field label="Fixed Offer Price (KES)">
+                        <Input
+                          icon={DollarSign}
+                          value={editForm.offerPrice}
+                          onChange={setEditField("offerPrice")}
+                          type="number"
+                          min="0"
+                          placeholder="22000000"
+                        />
+                      </Field>
+                    )}
+                    {offerMode !== "none" && (
+                      <div style={{ marginTop: 12 }}>
+                        <Field label="Offer Expires">
+                          <Input
+                            icon={Calendar}
+                            value={editForm.offerExpiresAt}
+                            onChange={setEditField("offerExpiresAt")}
+                            type="date"
+                          />
+                        </Field>
+                      </div>
+                    )}
+                    <div style={{ marginTop: 12 }}>
+                      <PricingPreview
+                        preview={editPricingPreview}
+                        formatKES={formatKES}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
-              {/* Beds / Baths / Area */}
+              {/* Rental pricing */}
+              {showRent && (
+                <div
+                  style={{
+                    background: "#eff6ff",
+                    border: "1.5px solid #bfdbfe",
+                    borderRadius: 14,
+                    padding: 16,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 14,
+                  }}
+                >
+                  <p
+                    style={{
+                      fontFamily: "'Jost',sans-serif",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: "#1e40af",
+                      letterSpacing: "0.12em",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    For Rent
+                  </p>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: 12,
+                    }}
+                  >
+                    <Field label="Per Day (KES)">
+                      <Input
+                        icon={Calendar}
+                        value={editForm.rentPerDay}
+                        onChange={setEditField("rentPerDay")}
+                        type="number"
+                        min="0"
+                        placeholder="e.g. 15000"
+                      />
+                    </Field>
+                    <Field label="Per Month (KES)">
+                      <Input
+                        icon={Calendar}
+                        value={editForm.rentPerMonth}
+                        onChange={setEditField("rentPerMonth")}
+                        type="number"
+                        min="0"
+                        placeholder="e.g. 85000"
+                      />
+                    </Field>
+                  </div>
+                  <Field label="Rental Label" hint="e.g. Short stay available">
+                    <Input
+                      icon={Tag}
+                      value={editForm.rentalLabel}
+                      onChange={setEditField("rentalLabel")}
+                      placeholder="e.g. Short stay available"
+                    />
+                  </Field>
+                  {!editForm.rentPerDay && !editForm.rentPerMonth && (
+                    <p
+                      style={{
+                        fontFamily: "'Jost',sans-serif",
+                        fontSize: 11,
+                        color: "#dc2626",
+                      }}
+                    >
+                      At least one of per-day or per-month is required.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── RIGHT ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+          {/* Specs */}
+          <div style={card}>
+            <SectionHead icon={Maximize2}>Specs</SectionHead>
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <div
                 style={{
                   display: "grid",
@@ -903,7 +1158,7 @@ function EditView({ onBack, hook }) {
                 </Field>
                 <Field label="Baths">
                   <Input
-                    icon={Bed}
+                    icon={Bath}
                     value={editForm.baths}
                     onChange={setEditField("baths")}
                     type="number"
@@ -922,102 +1177,113 @@ function EditView({ onBack, hook }) {
                   />
                 </Field>
               </div>
+
+              {/* Land area */}
+              <div
+                style={{
+                  background: CREAM,
+                  border: `1.5px solid ${BORDER}`,
+                  borderRadius: 12,
+                  padding: "14px 16px",
+                }}
+              >
+                <p
+                  style={{
+                    fontFamily: "'Jost',sans-serif",
+                    fontSize: 11,
+                    color: LABEL,
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    marginBottom: 12,
+                  }}
+                >
+                  Land Area{" "}
+                  <span
+                    style={{
+                      fontWeight: 400,
+                      textTransform: "none",
+                      letterSpacing: 0,
+                      color: "#c8b09a",
+                    }}
+                  >
+                    — optional
+                  </span>
+                </p>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "2fr 1fr",
+                    gap: 12,
+                  }}
+                >
+                  <Field label="Value">
+                    <Input
+                      icon={Ruler}
+                      value={editForm.landAreaValue}
+                      onChange={setEditField("landAreaValue")}
+                      type="number"
+                      min="0"
+                      placeholder="e.g. 0.5"
+                    />
+                  </Field>
+                  <Field label="Unit">
+                    <EditSelect
+                      value={editForm.landAreaUnit}
+                      onChange={setEditField("landAreaUnit")}
+                    >
+                      {LAND_UNITS.map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </EditSelect>
+                  </Field>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* ── RIGHT COLUMN ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
           {/* Classification */}
           <div style={card}>
-            <SectionTitle>Classification</SectionTitle>
+            <SectionHead icon={Layers}>Classification</SectionHead>
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              <Field label="Property Type">
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {propertyTypes.map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setEditDirect("type", t)}
-                      style={{
-                        fontFamily: "'Jost',sans-serif",
-                        fontSize: 12,
-                        fontWeight: editForm.type === t ? 600 : 400,
-                        padding: "8px 14px",
-                        borderRadius: 99,
-                        border:
-                          editForm.type === t
-                            ? "none"
-                            : `1.5px solid ${BORDER}`,
-                        background:
-                          editForm.type === t
-                            ? `linear-gradient(135deg,${PURPLE},${DPURPLE})`
-                            : CREAM,
-                        color: editForm.type === t ? "#fff" : MUTED,
-                        cursor: "pointer",
-                        transition: "all 0.2s",
-                      }}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
+              <Field label="Property Type" required>
+                <Pills
+                  options={propertyTypes}
+                  value={editForm.type}
+                  onChange={(t) => setEditDirect("type", t)}
+                />
               </Field>
 
               <Field label="Badge">
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {badges.map((b) => (
-                    <button
-                      key={b}
-                      onClick={() =>
-                        setEditDirect("badge", editForm.badge === b ? "" : b)
-                      }
-                      style={{
-                        fontFamily: "'Jost',sans-serif",
-                        fontSize: 12,
-                        fontWeight: editForm.badge === b ? 600 : 400,
-                        padding: "8px 14px",
-                        borderRadius: 99,
-                        border:
-                          editForm.badge === b
-                            ? "none"
-                            : `1.5px solid ${BORDER}`,
-                        background: editForm.badge === b ? "#b45309" : CREAM,
-                        color: editForm.badge === b ? "#fff" : MUTED,
-                        cursor: "pointer",
-                        transition: "all 0.2s",
-                      }}
-                    >
-                      {b}
-                    </button>
-                  ))}
-                </div>
+                <Pills
+                  options={badges}
+                  value={editForm.badge}
+                  onChange={(b) =>
+                    setEditDirect("badge", editForm.badge === b ? "" : b)
+                  }
+                  colorFn={() => AMBER}
+                />
               </Field>
 
               <Field label="Status">
-                <select
+                <EditSelect
                   value={editForm.status}
                   onChange={setEditField("status")}
-                  style={{
-                    ...editInputBase,
-                    paddingRight: 32,
-                    cursor: "pointer",
-                  }}
-                  onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
-                  onBlur={(e) => (e.target.style.borderColor = BORDER)}
                 >
                   {STATUSES.map((s) => (
                     <option key={s} value={s}>
                       {s}
                     </option>
                   ))}
-                </select>
+                </EditSelect>
               </Field>
             </div>
           </div>
 
           {/* Description & Features */}
           <div style={card}>
-            <SectionTitle>Description & Features</SectionTitle>
+            <SectionHead icon={Home}>Description & Features</SectionHead>
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <Field label="Description">
                 <textarea
@@ -1025,16 +1291,11 @@ function EditView({ onBack, hook }) {
                   onChange={setEditField("description")}
                   rows={4}
                   placeholder="Describe the property…"
-                  style={{
-                    ...editInputBase,
-                    resize: "vertical",
-                    lineHeight: 1.7,
-                  }}
-                  onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
-                  onBlur={(e) => (e.target.style.borderColor = BORDER)}
+                  style={{ ...editBase, resize: "vertical", lineHeight: 1.7 }}
+                  onFocus={focus}
+                  onBlur={blur}
                 />
               </Field>
-
               <Field label="Key Features" hint="Press Enter or click + to add">
                 <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                   <input
@@ -1043,14 +1304,10 @@ function EditView({ onBack, hook }) {
                     onKeyDown={(e) =>
                       e.key === "Enter" && (e.preventDefault(), addFeature())
                     }
-                    placeholder="e.g. Swimming pool, BQ, Solar…"
-                    style={{
-                      ...editInputBase,
-                      fontSize: 12,
-                      padding: "10px 14px",
-                    }}
-                    onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
-                    onBlur={(e) => (e.target.style.borderColor = BORDER)}
+                    placeholder="e.g. Swimming pool, Solar, BQ…"
+                    style={{ ...editBase, fontSize: 12, padding: "10px 14px" }}
+                    onFocus={focus}
+                    onBlur={blur}
                   />
                   <button
                     onClick={addFeature}
@@ -1059,7 +1316,7 @@ function EditView({ onBack, hook }) {
                       height: 38,
                       borderRadius: 10,
                       border: "none",
-                      background: `linear-gradient(135deg,${PURPLE},${DPURPLE})`,
+                      background: `linear-gradient(135deg,${P},${DP})`,
                       color: "#fff",
                       cursor: "pointer",
                       flexShrink: 0,
@@ -1080,7 +1337,7 @@ function EditView({ onBack, hook }) {
                         alignItems: "center",
                         gap: 5,
                         background: "#f3e8ff",
-                        color: PURPLE,
+                        color: P,
                         fontSize: 11,
                         fontWeight: 500,
                         padding: "4px 10px",
@@ -1100,7 +1357,7 @@ function EditView({ onBack, hook }) {
                           alignItems: "center",
                         }}
                       >
-                        <X size={10} color={PURPLE} />
+                        <X size={10} color={P} />
                       </button>
                     </span>
                   ))}
@@ -1109,15 +1366,15 @@ function EditView({ onBack, hook }) {
             </div>
           </div>
 
-          {/* Listing options */}
+          {/* Listing Options */}
           <div style={card}>
-            <SectionTitle>Listing Options</SectionTitle>
-            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <SectionHead icon={SlidersHorizontal}>Listing Options</SectionHead>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <Toggle
                 checked={editForm.isVisible}
                 onChange={(v) => setEditDirect("isVisible", v)}
                 label="Visible to public"
-                activeColor={PURPLE}
+                activeColor={P}
               />
               <Toggle
                 checked={editForm.isSoldOut}
@@ -1144,18 +1401,18 @@ function EditView({ onBack, hook }) {
             </div>
           </div>
 
-          {/* Save button */}
+          {/* Save */}
           <button
             onClick={submitEdit}
             disabled={editLoading}
             style={{
               width: "100%",
-              padding: "16px",
+              padding: 16,
               borderRadius: 14,
               border: "none",
               background: editLoading
                 ? "#9ca3af"
-                : `linear-gradient(135deg,${PURPLE},${DPURPLE})`,
+                : `linear-gradient(135deg,${P},${DP})`,
               color: "#fff",
               fontFamily: "'Jost',sans-serif",
               fontSize: 14,
@@ -1203,14 +1460,224 @@ function EditView({ onBack, hook }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// FILTER PANEL (collapsible advanced filters)
+// ════════════════════════════════════════════════════════════════════════════
+function AdvancedFilters({ filters, setFilter, propertyTypes, badges }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "8px 14px",
+          borderRadius: 10,
+          border: `1.5px solid ${open ? P : BORDER}`,
+          background: open ? P + "0f" : CREAM,
+          cursor: "pointer",
+          fontFamily: "'Jost',sans-serif",
+          fontSize: 12,
+          color: open ? P : MUTED,
+          fontWeight: open ? 600 : 400,
+          whiteSpace: "nowrap",
+        }}
+      >
+        <Filter size={13} /> Advanced{" "}
+        <ChevronDown
+          size={12}
+          style={{
+            transform: open ? "rotate(180deg)" : "none",
+            transition: "transform 0.2s",
+          }}
+        />
+      </button>
+
+      {open && (
+        <div
+          style={{
+            ...card,
+            marginTop: 12,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))",
+            gap: 16,
+          }}
+        >
+          <div>
+            <p
+              style={{
+                fontFamily: "'Jost',sans-serif",
+                fontSize: 11,
+                color: LABEL,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                marginBottom: 8,
+              }}
+            >
+              Listing Intent
+            </p>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {["", ...LISTING_INTENTS].map((i) => {
+                const active = filters.listingIntent === i;
+                const colors = { sale: "#b45309", rent: "#1e40af", both: P };
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setFilter("listingIntent", i)}
+                    style={{
+                      fontFamily: "'Jost',sans-serif",
+                      fontSize: 11,
+                      fontWeight: active ? 600 : 400,
+                      padding: "5px 12px",
+                      borderRadius: 99,
+                      border: active ? "none" : `1.5px solid ${BORDER}`,
+                      background: active ? (i ? colors[i] : "#374151") : CREAM,
+                      color: active ? "#fff" : MUTED,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {i || "All"}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <p
+              style={{
+                fontFamily: "'Jost',sans-serif",
+                fontSize: 11,
+                color: LABEL,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                marginBottom: 8,
+              }}
+            >
+              Listing Mode
+            </p>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {["", ...LISTING_MODES].map((m) => {
+                const active = filters.listingMode === m;
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setFilter("listingMode", m)}
+                    style={{
+                      fontFamily: "'Jost',sans-serif",
+                      fontSize: 11,
+                      fontWeight: active ? 600 : 400,
+                      padding: "5px 12px",
+                      borderRadius: 99,
+                      border: active ? "none" : `1.5px solid ${BORDER}`,
+                      background: active
+                        ? `linear-gradient(135deg,${P},${DP})`
+                        : CREAM,
+                      color: active ? "#fff" : MUTED,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {m || "All"}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <p
+              style={{
+                fontFamily: "'Jost',sans-serif",
+                fontSize: 11,
+                color: LABEL,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                marginBottom: 8,
+              }}
+            >
+              Badge
+            </p>
+            <select
+              value={filters.badge}
+              onChange={(e) => setFilter("badge", e.target.value)}
+              style={{
+                ...inputBase,
+                paddingRight: 28,
+                cursor: "pointer",
+                appearance: "none",
+              }}
+              onFocus={focus}
+              onBlur={blur}
+            >
+              <option value="">All badges</option>
+              {badges.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <p
+              style={{
+                fontFamily: "'Jost',sans-serif",
+                fontSize: 11,
+                color: LABEL,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                marginBottom: 8,
+              }}
+            >
+              Price Range (KES)
+            </p>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                value={filters.minPrice}
+                onChange={(e) => setFilter("minPrice", e.target.value)}
+                type="number"
+                min="0"
+                placeholder="Min"
+                style={{ ...inputBase, flex: 1, padding: "9px 12px" }}
+                onFocus={focus}
+                onBlur={blur}
+              />
+              <span
+                style={{
+                  color: LABEL,
+                  fontSize: 12,
+                  fontFamily: "'Jost',sans-serif",
+                }}
+              >
+                –
+              </span>
+              <input
+                value={filters.maxPrice}
+                onChange={(e) => setFilter("maxPrice", e.target.value)}
+                type="number"
+                min="0"
+                placeholder="Max"
+                style={{ ...inputBase, flex: 1, padding: "9px 12px" }}
+                onFocus={focus}
+                onBlur={blur}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════════════════
 export default function Properties() {
   const navigate = useNavigate();
-  const [view, setView] = useState("list"); // "list" | "edit"
+  const [view, setView] = useState("list");
 
   const hook = useManageProperties();
-
   const {
     properties,
     total,
@@ -1224,7 +1691,6 @@ export default function Properties() {
     fetchProperties,
     propertyTypes,
     badges,
-    categoriesLoading,
     toggleVisibility,
     toggleSoldOut,
     openEdit,
@@ -1241,20 +1707,15 @@ export default function Properties() {
     openEdit(property);
     setView("edit");
   };
-
   const handleBack = () => {
     hook.closeEdit();
     setView("list");
   };
 
-  // ── Edit view ──────────────────────────────────────────────────────────────
-  if (view === "edit") {
-    return <EditView onBack={handleBack} hook={hook} />;
-  }
+  if (view === "edit") return <EditView onBack={handleBack} hook={hook} />;
 
-  // ── List view ──────────────────────────────────────────────────────────────
   return (
-    <div style={{ padding: "36px 40px", maxWidth: 1100, margin: "0 auto" }}>
+    <div style={{ padding: "36px 40px", maxWidth: 1160, margin: "0 auto" }}>
       {/* Header */}
       <div
         style={{
@@ -1269,7 +1730,7 @@ export default function Properties() {
             style={{
               fontFamily: "'Jost',sans-serif",
               fontSize: 12,
-              color: "#b45309",
+              color: AMBER,
               letterSpacing: "0.2em",
               textTransform: "uppercase",
               fontWeight: 500,
@@ -1298,7 +1759,7 @@ export default function Properties() {
             padding: "11px 20px",
             borderRadius: 12,
             border: "none",
-            background: `linear-gradient(135deg,${PURPLE},${DPURPLE})`,
+            background: `linear-gradient(135deg,${P},${DP})`,
             color: "#fff",
             fontFamily: "'Jost',sans-serif",
             fontSize: 13,
@@ -1319,6 +1780,7 @@ export default function Properties() {
             gridTemplateColumns: "1fr auto auto auto auto auto",
             gap: 12,
             alignItems: "center",
+            marginBottom: 12,
           }}
         >
           {/* Search */}
@@ -1339,8 +1801,8 @@ export default function Properties() {
               onChange={(e) => setFilter("search", e.target.value)}
               placeholder="Search properties…"
               style={{ ...inputBase, paddingLeft: 38 }}
-              onFocus={(e) => (e.target.style.borderColor = "#c2884a")}
-              onBlur={(e) => (e.target.style.borderColor = BORDER)}
+              onFocus={focus}
+              onBlur={blur}
             />
           </div>
           {/* Type */}
@@ -1350,9 +1812,12 @@ export default function Properties() {
             style={{
               ...inputBase,
               width: "auto",
-              paddingRight: 32,
+              paddingRight: 28,
               cursor: "pointer",
+              appearance: "none",
             }}
+            onFocus={focus}
+            onBlur={blur}
           >
             <option value="">All types</option>
             {propertyTypes.map((t) => (
@@ -1368,9 +1833,12 @@ export default function Properties() {
             style={{
               ...inputBase,
               width: "auto",
-              paddingRight: 32,
+              paddingRight: 28,
               cursor: "pointer",
+              appearance: "none",
             }}
+            onFocus={focus}
+            onBlur={blur}
           >
             <option value="">All statuses</option>
             {STATUSES.map((s) => (
@@ -1386,9 +1854,12 @@ export default function Properties() {
             style={{
               ...inputBase,
               width: "auto",
-              paddingRight: 32,
+              paddingRight: 28,
               cursor: "pointer",
+              appearance: "none",
             }}
+            onFocus={focus}
+            onBlur={blur}
           >
             {SORTS.map((s) => (
               <option key={s.value} value={s.value}>
@@ -1409,23 +1880,22 @@ export default function Properties() {
               style={{
                 padding: "8px 12px",
                 borderRadius: 10,
-                border: `1.5px solid ${filters.isFeatured === "true" ? PURPLE : BORDER}`,
-                background:
-                  filters.isFeatured === "true" ? PURPLE + "18" : CREAM,
+                border: `1.5px solid ${filters.isFeatured === "true" ? P : BORDER}`,
+                background: filters.isFeatured === "true" ? P + "18" : CREAM,
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 gap: 4,
                 fontFamily: "'Jost',sans-serif",
                 fontSize: 11,
-                color: filters.isFeatured === "true" ? PURPLE : MUTED,
+                color: filters.isFeatured === "true" ? P : MUTED,
                 fontWeight: filters.isFeatured === "true" ? 600 : 400,
               }}
             >
               <Star
                 size={12}
-                fill={filters.isFeatured === "true" ? PURPLE : "none"}
-                color={filters.isFeatured === "true" ? PURPLE : MUTED}
+                fill={filters.isFeatured === "true" ? P : "none"}
+                color={filters.isFeatured === "true" ? P : MUTED}
               />{" "}
               Featured
             </button>
@@ -1459,7 +1929,7 @@ export default function Properties() {
           <button
             onClick={fetchProperties}
             style={{
-              padding: "10px 16px",
+              padding: "10px 14px",
               borderRadius: 10,
               border: `1.5px solid ${BORDER}`,
               background: CREAM,
@@ -1472,9 +1942,18 @@ export default function Properties() {
               color: MUTED,
             }}
           >
-            <SlidersHorizontal size={13} /> Refresh
+            <RefreshCw size={13} />
           </button>
         </div>
+
+        {/* Advanced filters */}
+        <AdvancedFilters
+          filters={filters}
+          setFilter={setFilter}
+          propertyTypes={propertyTypes}
+          badges={badges}
+        />
+
         <p
           style={{
             fontFamily: "'Jost',sans-serif",
@@ -1484,10 +1963,37 @@ export default function Properties() {
           }}
         >
           {total} propert{total === 1 ? "y" : "ies"} found
+          {(filters.listingIntent ||
+            filters.listingMode ||
+            filters.minPrice ||
+            filters.maxPrice ||
+            filters.badge) && (
+            <button
+              onClick={() => {
+                setFilter("listingIntent", "");
+                setFilter("listingMode", "");
+                setFilter("minPrice", "");
+                setFilter("maxPrice", "");
+                setFilter("badge", "");
+              }}
+              style={{
+                marginLeft: 12,
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "'Jost',sans-serif",
+                fontSize: 11,
+                color: "#dc2626",
+                fontWeight: 500,
+              }}
+            >
+              Clear filters ×
+            </button>
+          )}
         </p>
       </div>
 
-      {/* List error */}
+      {/* Error */}
       {listError && (
         <div
           style={{
@@ -1525,7 +2031,7 @@ export default function Properties() {
         >
           <Loader2
             size={28}
-            color={PURPLE}
+            color={P}
             style={{ animation: "spin 0.8s linear infinite" }}
           />
         </div>
@@ -1539,14 +2045,14 @@ export default function Properties() {
               width: 56,
               height: 56,
               borderRadius: 16,
-              background: `${PURPLE}12`,
+              background: `${P}12`,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               margin: "0 auto 16px",
             }}
           >
-            <Home size={24} color={PURPLE} strokeWidth={1.5} />
+            <Home size={24} color={P} strokeWidth={1.5} />
           </div>
           <p
             style={{
@@ -1571,7 +2077,7 @@ export default function Properties() {
         </div>
       )}
 
-      {/* Property grid */}
+      {/* Grid */}
       {!listLoading && properties.length > 0 && (
         <div
           style={{
@@ -1585,9 +2091,9 @@ export default function Properties() {
             const img = p.primaryImage || p.images?.[0]?.url;
             const pricing = p.pricing || {};
             const hasOffer = pricing.hasActiveOffer;
-            const effective =
-              pricing.effectivePrice ?? pricing.original ?? p.price;
+            const effective = pricing.effectivePrice ?? pricing.original;
             const savings = pricing.savingsPercent;
+            const rp = p.rentalPricing;
 
             return (
               <div
@@ -1596,14 +2102,18 @@ export default function Properties() {
                   ...card,
                   padding: 0,
                   overflow: "hidden",
-                  transition: "box-shadow 0.2s",
+                  transition: "box-shadow 0.2s, transform 0.2s",
                   opacity: p.isVisible ? 1 : 0.65,
                 }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.boxShadow =
-                    "0 8px 32px rgba(123,45,139,0.12)")
-                }
-                onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.boxShadow =
+                    "0 8px 32px rgba(123,45,139,0.12)";
+                  e.currentTarget.style.transform = "translateY(-2px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.boxShadow = "none";
+                  e.currentTarget.style.transform = "translateY(0)";
+                }}
               >
                 {/* Image */}
                 <div
@@ -1695,7 +2205,7 @@ export default function Properties() {
                         position: "absolute",
                         top: 10,
                         left: 10,
-                        background: "#b45309",
+                        background: AMBER,
                         color: "#fff",
                         fontSize: 9,
                         fontWeight: 700,
@@ -1727,19 +2237,22 @@ export default function Properties() {
                       {savings}% OFF
                     </span>
                   )}
-                  {p.isFeatured && (
-                    <span style={{ position: "absolute", top: 10, right: 10 }}>
-                      <Star size={15} fill="#F59E0B" color="#F59E0B" />
-                    </span>
-                  )}
                   <div
                     style={{
                       position: "absolute",
-                      top: p.isFeatured ? 30 : 10,
+                      top: 10,
                       right: 10,
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-end",
+                      gap: 4,
                     }}
                   >
+                    {p.isFeatured && (
+                      <Star size={15} fill="#F59E0B" color="#F59E0B" />
+                    )}
                     <StatusPill status={p.status} />
+                    <IntentBadge intent={p.listingIntent || "sale"} />
                   </div>
                   {p.images?.length > 1 && (
                     <span
@@ -1762,6 +2275,22 @@ export default function Properties() {
 
                 {/* Body */}
                 <div style={{ padding: "16px 18px 18px" }}>
+                  {/* Name + building */}
+                  {p.buildingName && (
+                    <p
+                      style={{
+                        fontFamily: "'Jost',sans-serif",
+                        fontSize: 10,
+                        color: LABEL,
+                        marginBottom: 2,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      <Building2 size={10} color={LABEL} /> {p.buildingName}
+                    </p>
+                  )}
                   <p
                     style={{
                       fontFamily: "'Cormorant Garamond',serif",
@@ -1789,7 +2318,16 @@ export default function Properties() {
                   >
                     <MapPin size={11} color="#c2884a" /> {p.location}
                   </p>
-                  <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+
+                  {/* Specs row */}
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 12,
+                      marginBottom: 12,
+                      flexWrap: "wrap",
+                    }}
+                  >
                     {p.beds > 0 && (
                       <span
                         style={{
@@ -1835,6 +2373,21 @@ export default function Properties() {
                         {p.area} m²
                       </span>
                     )}
+                    {p.landArea && (
+                      <span
+                        style={{
+                          fontFamily: "'Jost',sans-serif",
+                          fontSize: 11,
+                          color: MUTED,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        <Ruler size={11} color="#c2884a" />
+                        {p.landArea.value} {p.landArea.unit}
+                      </span>
+                    )}
                     <span
                       style={{
                         fontFamily: "'Jost',sans-serif",
@@ -1850,48 +2403,92 @@ export default function Properties() {
                     </span>
                   </div>
 
-                  {/* Price */}
+                  {/* Pricing */}
                   <div style={{ marginBottom: 14 }}>
-                    {hasOffer ? (
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "baseline",
-                          gap: 8,
-                        }}
-                      >
+                    {/* Sale pricing */}
+                    {pricing.original != null &&
+                      (hasOffer ? (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "baseline",
+                            gap: 8,
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontFamily: "'Jost',sans-serif",
+                              fontSize: 15,
+                              fontWeight: 700,
+                              color: "#dc2626",
+                            }}
+                          >
+                            {formatKES(effective)}
+                          </span>
+                          <span
+                            style={{
+                              fontFamily: "'Jost',sans-serif",
+                              fontSize: 12,
+                              color: MUTED,
+                              textDecoration: "line-through",
+                            }}
+                          >
+                            {formatKES(pricing.original)}
+                          </span>
+                        </div>
+                      ) : (
                         <span
                           style={{
                             fontFamily: "'Jost',sans-serif",
                             fontSize: 15,
                             fontWeight: 700,
-                            color: "#dc2626",
-                          }}
-                        >
-                          {formatKES(effective)}
-                        </span>
-                        <span
-                          style={{
-                            fontFamily: "'Jost',sans-serif",
-                            fontSize: 12,
-                            color: MUTED,
-                            textDecoration: "line-through",
+                            color: P,
                           }}
                         >
                           {formatKES(pricing.original)}
                         </span>
-                      </div>
-                    ) : (
-                      <span
+                      ))}
+                    {/* Rental pricing */}
+                    {rp && (rp.rentPerMonth || rp.rentPerDay) && (
+                      <div
                         style={{
-                          fontFamily: "'Jost',sans-serif",
-                          fontSize: 15,
-                          fontWeight: 700,
-                          color: PURPLE,
+                          display: "flex",
+                          gap: 8,
+                          marginTop: pricing.original != null ? 4 : 0,
+                          flexWrap: "wrap",
                         }}
                       >
-                        {formatKES(pricing.original ?? p.price)}
-                      </span>
+                        {rp.rentPerMonth && (
+                          <span
+                            style={{
+                              fontFamily: "'Jost',sans-serif",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: "#1e40af",
+                            }}
+                          >
+                            {formatKES(rp.rentPerMonth)}
+                            <span style={{ fontWeight: 400, fontSize: 10 }}>
+                              /mo
+                            </span>
+                          </span>
+                        )}
+                        {rp.rentPerDay && (
+                          <span
+                            style={{
+                              fontFamily: "'Jost',sans-serif",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: "#1e40af",
+                            }}
+                          >
+                            {formatKES(rp.rentPerDay)}
+                            <span style={{ fontWeight: 400, fontSize: 10 }}>
+                              /day
+                            </span>
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -1917,8 +2514,8 @@ export default function Properties() {
                         transition: "all 0.15s",
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.borderColor = PURPLE;
-                        e.currentTarget.style.color = PURPLE;
+                        e.currentTarget.style.borderColor = P;
+                        e.currentTarget.style.color = P;
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.borderColor = BORDER;
@@ -1996,9 +2593,7 @@ export default function Properties() {
                 borderRadius: 10,
                 border: n === page ? "none" : `1.5px solid ${BORDER}`,
                 background:
-                  n === page
-                    ? `linear-gradient(135deg,${PURPLE},${DPURPLE})`
-                    : CREAM,
+                  n === page ? `linear-gradient(135deg,${P},${DP})` : CREAM,
                 color: n === page ? "#fff" : MUTED,
                 fontFamily: "'Jost',sans-serif",
                 fontSize: 13,
@@ -2064,8 +2659,9 @@ export default function Properties() {
                   lineHeight: 1.6,
                 }}
               >
-                <strong>{deleting.name}</strong> will be permanently removed
-                along with all its images. This cannot be undone.
+                <strong>{deleting.displayName || deleting.name}</strong> will be
+                permanently removed along with all its images. This cannot be
+                undone.
               </p>
             </div>
             {deleteError && (
@@ -2104,7 +2700,7 @@ export default function Properties() {
               <button
                 onClick={closeDelete}
                 style={{
-                  padding: "13px",
+                  padding: 13,
                   borderRadius: 12,
                   border: `1.5px solid ${BORDER}`,
                   background: CREAM,
@@ -2121,7 +2717,7 @@ export default function Properties() {
                 onClick={confirmDelete}
                 disabled={deleteLoading}
                 style={{
-                  padding: "13px",
+                  padding: 13,
                   borderRadius: 12,
                   border: "none",
                   background: deleteLoading ? "#9ca3af" : "#dc2626",

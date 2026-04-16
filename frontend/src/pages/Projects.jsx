@@ -15,10 +15,13 @@ import {
   LogIn,
   ArrowRight,
   RotateCcw,
+  Building2,
+  Clock,
+  CheckCheck,
+  TrendingUp,
 } from "lucide-react";
-import { useListings, usePropertyActions } from "../Hooks/useListings";
 
-// ─── Brand Tokens ─────────────────────────────────────────────────────────────
+// ─── Brand Tokens (mirrors Listings) ─────────────────────────────────────────
 const B = {
   primary: "#0a1172",
   secondary: "#1a3a5c",
@@ -31,20 +34,23 @@ const B = {
   serif: "'Playfair Display', Georgia, serif",
   sans: "'Lato', 'Helvetica Neue', Arial, sans-serif",
   grad: "linear-gradient(135deg, #0a1172 0%, #1a3a5c 100%)",
+  gradGold: "linear-gradient(135deg, #d4af37 0%, #b8962e 100%)",
+  completedBadge: "#1a7a4a",
+  inProgressBadge: "#b45309",
 };
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+const API_BASE = "https://splendorholdings-2v47.vercel.app";
+
 const heroBgs = [
-  "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1920&q=80",
-  "https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=1920&q=80",
-  "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1920&q=80",
+  "https://images.unsplash.com/photo-1486325212027-8081e485255e?w=1920&q=80",
+  "https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=1920&q=80",
+  "https://images.unsplash.com/photo-1621905251918-48416bd8575a?w=1920&q=80",
 ];
 
 const SORT_OPTIONS = [
   "Newest First",
   "Price: Low → High",
   "Price: High → Low",
-  "Top Rated",
   "Featured First",
 ];
 
@@ -70,6 +76,31 @@ const spanPattern = [
   { col: 1, row: 1 },
 ];
 
+const SORT_MAP = {
+  "Newest First": "-createdAt",
+  "Price: Low → High": "pricing.original",
+  "Price: High → Low": "-pricing.original",
+  "Featured First": "-isFeatured -createdAt",
+};
+
+// ─── API helpers ──────────────────────────────────────────────────────────────
+async function apiFetch(path, options = {}) {
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers ?? {}),
+    },
+  });
+  const json = await res.json();
+  if (!res.ok)
+    throw new Error(json?.message ?? `Request failed (${res.status})`);
+  return json;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getPrimaryImage(p) {
   if (!p.images?.length) return null;
@@ -78,30 +109,142 @@ function getPrimaryImage(p) {
 }
 
 function formatPrice(p) {
-  const n = p.pricing?.original;
   if (p.pricing?.label) return p.pricing.label;
+  const n = p.pricing?.original;
   if (!n) return "—";
   if (n >= 1_000_000) return `KES ${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `KES ${(n / 1_000).toFixed(0)}K`;
   return `KES ${n}`;
 }
 
-function normalizeProperty(p) {
+function normalizeProject(p) {
   return {
     id: p._id,
     name: p.name,
+    buildingName: p.buildingName,
     location: p.location,
     price: formatPrice(p),
     beds: p.beds ?? 0,
     baths: p.baths ?? 0,
     area: p.area ?? 0,
-    type: p.type ?? "",
-    badge: p.badge ?? "For Sale",
-    badgeColor: p.badgeColor ?? B.primary,
+    type: p.type ?? "Project",
+    badge: p.badge ?? "Project",
     rating: p.rating ?? null,
     img: getPrimaryImage(p),
     isSoldOut: p.isSoldOut ?? false,
+    projectStatus: p.projectStatus ?? "in-progress",
     raw: p,
+  };
+}
+
+// ─── useProjects hook ─────────────────────────────────────────────────────────
+function useProjects({ limit = 12 } = {}) {
+  const DEFAULT_FILTERS = {
+    keyword: "",
+    location: "All Locations",
+    sort: "Newest First",
+  };
+
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [allProjects, setAllProjects] = useState([]);
+  const [pagination, setPagination] = useState(null);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState(null);
+  const [tick, setTick] = useState(0);
+  const isAppend = useRef(false);
+
+  const refetch = useCallback(() => {
+    setPage(1);
+    isAppend.current = false;
+    setTick((n) => n + 1);
+  }, []);
+
+  const loadMore = useCallback(() => {
+    if (!pagination || page >= pagination.pages) return;
+    isAppend.current = true;
+    setPage((p) => p + 1);
+  }, [pagination, page]);
+
+  const setFilter = useCallback((key, value) => {
+    setFilters((f) => ({ ...f, [key]: value }));
+    setPage(1);
+    isAppend.current = false;
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setFilters(DEFAULT_FILTERS);
+    setPage(1);
+    isAppend.current = false;
+    setTick((n) => n + 1);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isAppend.current) setLoading(true);
+    else setLoadingMore(true);
+    setError(null);
+
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+      sort: SORT_MAP[filters.sort] ?? "-createdAt",
+      type: "Project",
+    });
+    if (filters.keyword.trim()) params.set("search", filters.keyword.trim());
+
+    apiFetch(`/api/v1/properties?${params.toString()}`)
+      .then((json) => {
+        if (cancelled) return;
+        const incoming = json.data?.properties ?? [];
+        setAllProjects((prev) =>
+          isAppend.current ? [...prev, ...incoming] : incoming,
+        );
+        setPagination(json.pagination ?? null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err.message ?? "Failed to load projects.");
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+        setLoadingMore(false);
+        isAppend.current = false;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filters.keyword, filters.sort, page, limit, tick]);
+
+  const projects =
+    filters.location === "All Locations"
+      ? allProjects
+      : allProjects.filter((p) =>
+          p.location?.toLowerCase().includes(filters.location.toLowerCase()),
+        );
+
+  const completed = projects.filter((p) => p.projectStatus === "completed");
+  const inProgress = projects.filter((p) => p.projectStatus !== "completed");
+
+  return {
+    projects,
+    completed,
+    inProgress,
+    loading,
+    loadingMore,
+    error,
+    hasMore: pagination ? page < pagination.pages : false,
+    filters,
+    setFilter,
+    resetFilters,
+    loadMore,
+    refetch,
+    totalCount: pagination?.total ?? projects.length,
+    completedCount: completed.length,
+    inProgressCount: inProgress.length,
   };
 }
 
@@ -123,11 +266,44 @@ function SkeletonCard({ spanCol, spanRow }) {
   );
 }
 
-// ─── Listing Card ─────────────────────────────────────────────────────────────
-function ListingCard({ property, spanCol, spanRow, onAction }) {
+// ─── Project Status Badge ─────────────────────────────────────────────────────
+function StatusPill({ status }) {
+  const isCompleted = status === "completed";
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        background: isCompleted
+          ? "rgba(26,122,74,0.90)"
+          : "rgba(180,83,9,0.90)",
+        backdropFilter: "blur(8px)",
+        color: "#fff",
+        fontSize: 10,
+        fontWeight: 700,
+        padding: "4px 11px",
+        borderRadius: 99,
+        letterSpacing: "0.08em",
+        textTransform: "uppercase",
+        fontFamily: B.sans,
+      }}
+    >
+      {isCompleted ? (
+        <CheckCheck size={10} strokeWidth={2.5} />
+      ) : (
+        <Clock size={10} strokeWidth={2.5} />
+      )}
+      {isCompleted ? "Completed" : "In Progress"}
+    </span>
+  );
+}
+
+// ─── Project Card ─────────────────────────────────────────────────────────────
+function ProjectCard({ property, spanCol, spanRow, onAction }) {
   const [liked, setLiked] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const p = normalizeProperty(property);
+  const p = normalizeProject(property);
   const isTall = spanRow === 2;
   const isWide = spanCol === 2;
 
@@ -180,14 +356,17 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
             position: "absolute",
             inset: 0,
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
+            gap: 8,
             color: B.accent,
-            fontSize: 13,
-            fontFamily: B.sans,
           }}
         >
-          No image
+          <Building2 size={32} color={B.accent} strokeWidth={1.5} />
+          <span style={{ fontSize: 13, fontFamily: B.sans, color: B.muted }}>
+            No image
+          </span>
         </div>
       )}
 
@@ -197,7 +376,7 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
           position: "absolute",
           inset: 0,
           background:
-            "linear-gradient(180deg, rgba(10,17,114,0.06) 0%, rgba(10,17,114,0.72) 100%)",
+            "linear-gradient(180deg, rgba(10,17,114,0.06) 0%, rgba(10,17,114,0.78) 100%)",
         }}
       />
 
@@ -207,7 +386,7 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
           style={{
             position: "absolute",
             inset: 0,
-            background: "rgba(10,17,114,0.48)",
+            background: "rgba(10,17,114,0.50)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -232,32 +411,20 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
         </div>
       )}
 
-      {/* Badges */}
+      {/* Top badges row */}
       <div
         style={{
           position: "absolute",
           top: 16,
           left: 16,
+          right: 56,
           display: "flex",
           gap: 6,
+          flexWrap: "wrap",
           zIndex: 2,
         }}
       >
-        <span
-          style={{
-            background: p.badgeColor,
-            color: "#fff",
-            fontSize: 10,
-            fontWeight: 700,
-            padding: "4px 11px",
-            borderRadius: 99,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            fontFamily: B.sans,
-          }}
-        >
-          {p.badge}
-        </span>
+        <StatusPill status={p.projectStatus} />
         <span
           style={{
             background: "rgba(255,255,255,0.15)",
@@ -271,17 +438,17 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
             fontFamily: B.sans,
           }}
         >
-          {p.type}
+          {p.badge}
         </span>
       </div>
 
       {/* Rating */}
-      {p.rating != null && (
+      {p.rating != null && p.rating > 0 && (
         <div
           style={{
             position: "absolute",
-            top: 16,
-            right: 60,
+            top: 52,
+            left: 16,
             display: "flex",
             alignItems: "center",
             gap: 4,
@@ -341,7 +508,7 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
         />
       </button>
 
-      {/* Bottom info — no name */}
+      {/* Bottom info */}
       <div
         style={{
           position: "absolute",
@@ -352,6 +519,27 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
           zIndex: 2,
         }}
       >
+        {/* Project / building name */}
+        {(p.buildingName || p.name) && (
+          <p
+            style={{
+              fontFamily: B.serif,
+              fontSize: isTall ? 16 : 13,
+              fontWeight: 700,
+              color: "rgba(255,255,255,0.95)",
+              marginBottom: 6,
+              lineHeight: 1.2,
+              textShadow: "0 1px 8px rgba(0,0,0,0.4)",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {p.buildingName || p.name}
+          </p>
+        )}
+
         {/* Location */}
         <div
           style={{
@@ -365,10 +553,9 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
           <span
             style={{
               fontSize: 13,
-              color: "rgba(255,255,255,0.90)",
+              color: "rgba(255,255,255,0.85)",
               fontFamily: B.sans,
               fontWeight: 400,
-              letterSpacing: "0.02em",
             }}
           >
             {p.location}
@@ -465,14 +652,475 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
   );
 }
 
+// ─── Action Modal (same as Listings) ─────────────────────────────────────────
+function ActionModal({ property, onClose }) {
+  const isLoggedIn = !!localStorage.getItem("token");
+  const [mode, setMode] = useState("choose");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [inquiryMsg, setInquiryMsg] = useState("");
+  const [inquiryType, setInquiryType] = useState("Information");
+  const [guestName, setGuestName] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
+  const [guestPhone, setGuestPhone] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState(null);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  const handleInquiry = async () => {
+    if (!inquiryMsg.trim()) return;
+    setActionLoading(true);
+    setActionError(null);
+    try {
+      await apiFetch(`/api/v1/inquiries`, {
+        method: "POST",
+        body: JSON.stringify({
+          property: property.id,
+          message: inquiryMsg,
+          type: inquiryType,
+          ...(isLoggedIn ? {} : { guestName, guestEmail, guestPhone }),
+        }),
+      });
+      setSuccessMsg("Your inquiry has been sent! We'll be in touch soon.");
+      setMode("success");
+    } catch (err) {
+      setActionError(err.message ?? "Failed to submit inquiry.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const inputStyle = {
+    width: "100%",
+    padding: "10px 14px",
+    borderRadius: 10,
+    border: `1.5px solid ${B.beige}`,
+    fontFamily: B.sans,
+    fontSize: 14,
+    color: B.text,
+    background: B.white,
+    outline: "none",
+    boxSizing: "border-box",
+  };
+
+  const labelStyle = {
+    display: "block",
+    fontFamily: B.sans,
+    fontSize: 11,
+    fontWeight: 700,
+    color: B.accent,
+    marginBottom: 5,
+    letterSpacing: "0.2em",
+    textTransform: "uppercase",
+  };
+
+  const btnPrimary = {
+    width: "100%",
+    padding: "13px",
+    borderRadius: 99,
+    border: "none",
+    background: B.grad,
+    color: B.white,
+    fontFamily: B.sans,
+    fontSize: 13,
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    cursor: actionLoading ? "not-allowed" : "pointer",
+    opacity: actionLoading ? 0.7 : 1,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  };
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(10,17,114,0.50)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        zIndex: 1000,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: B.white,
+          borderRadius: 24,
+          width: "100%",
+          maxWidth: 460,
+          padding: "30px 28px",
+          position: "relative",
+          maxHeight: "90vh",
+          overflowY: "auto",
+          border: "1px solid rgba(212,175,55,0.28)",
+          boxShadow: "0 24px 80px rgba(10,17,114,0.25)",
+        }}
+      >
+        <button
+          onClick={onClose}
+          style={{
+            position: "absolute",
+            top: 18,
+            right: 18,
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            border: `1.5px solid ${B.beige}`,
+            background: B.white,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <X size={15} color={B.muted} />
+        </button>
+
+        <div style={{ marginBottom: 22 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 6,
+            }}
+          >
+            <StatusPill status={property.projectStatus} />
+          </div>
+          <p
+            style={{
+              fontFamily: B.sans,
+              fontSize: 11,
+              color: B.accent,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              marginBottom: 3,
+            }}
+          >
+            Project · {property.location}
+          </p>
+          <h3
+            style={{
+              fontFamily: B.serif,
+              fontSize: 22,
+              fontWeight: 700,
+              color: B.text,
+            }}
+          >
+            {property.buildingName || property.name}
+          </h3>
+          <p
+            style={{
+              fontFamily: B.serif,
+              fontSize: 20,
+              fontWeight: 700,
+              color: B.primary,
+              marginTop: 2,
+            }}
+          >
+            {property.price}
+          </p>
+        </div>
+        <div style={{ height: 1, background: B.beige, marginBottom: 22 }} />
+
+        {mode === "choose" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <p
+              style={{
+                fontFamily: B.sans,
+                fontSize: 14,
+                color: B.muted,
+                marginBottom: 8,
+                lineHeight: 1.6,
+              }}
+            >
+              Interested in this project?
+            </p>
+            <button
+              onClick={() => {
+                setActionError(null);
+                setMode("inquiry");
+              }}
+              style={btnPrimary}
+            >
+              <ArrowRight size={14} /> Send an Inquiry
+            </button>
+          </div>
+        )}
+
+        {mode === "inquiry" && (
+          <div>
+            <h4
+              style={{
+                fontFamily: B.serif,
+                fontSize: 20,
+                fontWeight: 700,
+                color: B.text,
+                marginBottom: 18,
+              }}
+            >
+              Send an Inquiry
+            </h4>
+            {!isLoggedIn && (
+              <>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={labelStyle}>Your Name</label>
+                  <input
+                    style={inputStyle}
+                    placeholder="Jane Doe"
+                    value={guestName}
+                    onChange={(e) => setGuestName(e.target.value)}
+                  />
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={labelStyle}>Email *</label>
+                  <input
+                    style={inputStyle}
+                    type="email"
+                    placeholder="you@example.com"
+                    value={guestEmail}
+                    onChange={(e) => setGuestEmail(e.target.value)}
+                  />
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  <label style={labelStyle}>Phone (optional)</label>
+                  <input
+                    style={inputStyle}
+                    type="tel"
+                    placeholder="+254 7XX XXX XXX"
+                    value={guestPhone}
+                    onChange={(e) => setGuestPhone(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+            <div style={{ marginBottom: 14 }}>
+              <label style={labelStyle}>Inquiry Type</label>
+              <select
+                style={{ ...inputStyle, appearance: "none" }}
+                value={inquiryType}
+                onChange={(e) => setInquiryType(e.target.value)}
+              >
+                {["Information", "Viewing", "Investment", "Other"].map((t) => (
+                  <option key={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom: 18 }}>
+              <label style={labelStyle}>Message *</label>
+              <textarea
+                style={{ ...inputStyle, minHeight: 100, resize: "vertical" }}
+                placeholder="What would you like to know about this project?"
+                value={inquiryMsg}
+                onChange={(e) => setInquiryMsg(e.target.value)}
+              />
+            </div>
+            {actionError && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: 8,
+                  alignItems: "flex-start",
+                  background: "#fff0f0",
+                  border: "1px solid #fca5a5",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  marginBottom: 14,
+                }}
+              >
+                <AlertCircle
+                  size={15}
+                  color="#dc2626"
+                  style={{ flexShrink: 0, marginTop: 1 }}
+                />
+                <p
+                  style={{
+                    fontFamily: B.sans,
+                    fontSize: 13,
+                    color: "#dc2626",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {actionError}
+                </p>
+              </div>
+            )}
+            <button
+              style={btnPrimary}
+              onClick={handleInquiry}
+              disabled={
+                actionLoading ||
+                !inquiryMsg.trim() ||
+                (!isLoggedIn && !guestEmail.trim())
+              }
+            >
+              {actionLoading ? (
+                <>
+                  <Loader2 size={14} className="spin" /> Sending…
+                </>
+              ) : (
+                "Send Inquiry"
+              )}
+            </button>
+            <button
+              onClick={() => {
+                setActionError(null);
+                setMode("choose");
+              }}
+              style={{
+                marginTop: 10,
+                width: "100%",
+                background: "none",
+                border: "none",
+                fontFamily: B.sans,
+                fontSize: 13,
+                color: B.muted,
+                cursor: "pointer",
+                textDecoration: "underline",
+              }}
+            >
+              ← Back
+            </button>
+          </div>
+        )}
+
+        {mode === "success" && (
+          <div style={{ textAlign: "center", padding: "10px 0" }}>
+            <CheckCircle2
+              size={40}
+              color={B.accent}
+              style={{ marginBottom: 14 }}
+            />
+            <h4
+              style={{
+                fontFamily: B.serif,
+                fontSize: 22,
+                fontWeight: 700,
+                color: B.text,
+                marginBottom: 8,
+              }}
+            >
+              Done!
+            </h4>
+            <p
+              style={{
+                fontFamily: B.sans,
+                fontSize: 14,
+                color: B.muted,
+                lineHeight: 1.6,
+                marginBottom: 22,
+              }}
+            >
+              {successMsg}
+            </p>
+            <button style={btnPrimary} onClick={onClose}>
+              Close
+            </button>
+          </div>
+        )}
+      </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} .spin{animation:spin .8s linear infinite;display:inline-block}`}</style>
+    </div>
+  );
+}
+
+// ─── Section Header ───────────────────────────────────────────────────────────
+function SectionHeader({ icon: Icon, title, count, color, subtitle }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "space-between",
+        marginBottom: 28,
+        flexWrap: "wrap",
+        gap: 12,
+      }}
+    >
+      <div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 6,
+          }}
+        >
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              background: color,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <Icon size={18} color="#fff" strokeWidth={2} />
+          </div>
+          <h2
+            style={{
+              fontFamily: B.serif,
+              fontSize: "clamp(1.4rem, 3vw, 2rem)",
+              fontWeight: 700,
+              color: B.text,
+              lineHeight: 1.1,
+            }}
+          >
+            {title}
+          </h2>
+        </div>
+        {subtitle && (
+          <p
+            style={{
+              fontFamily: B.sans,
+              fontSize: 14,
+              color: B.muted,
+              paddingLeft: 52,
+            }}
+          >
+            {subtitle}
+          </p>
+        )}
+      </div>
+      <div
+        style={{
+          background: color,
+          color: "#fff",
+          fontFamily: B.sans,
+          fontSize: 13,
+          fontWeight: 700,
+          padding: "6px 18px",
+          borderRadius: 99,
+          letterSpacing: "0.06em",
+          alignSelf: "flex-start",
+          marginTop: 4,
+        }}
+      >
+        {count} {count === 1 ? "project" : "projects"}
+      </div>
+    </div>
+  );
+}
+
 // ─── Filter Bar ───────────────────────────────────────────────────────────────
-function FilterBar({
-  filters,
-  setFilter,
-  resetFilters,
-  typeCategories,
-  totalCount,
-}) {
+function FilterBar({ filters, setFilter, resetFilters, totalCount }) {
   const [keywordInput, setKeywordInput] = useState(filters.keyword);
   const debounceRef = useRef(null);
 
@@ -534,52 +1182,38 @@ function FilterBar({
         borderRadius: 20,
         boxShadow: "0 8px 40px rgba(10,17,114,0.10)",
         overflow: "hidden",
-        marginBottom: 40,
+        marginBottom: 48,
         border: "1px solid rgba(212,175,55,0.15)",
       }}
     >
-      {/* Mode tabs */}
+      {/* Top bar */}
       <div
         style={{
           display: "flex",
+          alignItems: "center",
           background: B.beige,
           borderBottom: `1px solid rgba(212,175,55,0.20)`,
           padding: "0 24px",
+          minHeight: 52,
           flexWrap: "wrap",
+          gap: 8,
         }}
       >
-        {["For Sale", "For Rent", "Off-Plan"].map((badge, i) => {
-          const isActive =
-            (i === 0 && filters.badge === "Any Status") ||
-            filters.badge === badge;
-          return (
-            <button
-              key={badge}
-              onClick={() => setFilter("badge", i === 0 ? "Any Status" : badge)}
-              style={{
-                fontFamily: B.sans,
-                fontSize: 11,
-                fontWeight: 700,
-                padding: "14px 20px",
-                color: isActive ? B.primary : B.muted,
-                borderBottom: isActive
-                  ? `2px solid ${B.primary}`
-                  : "2px solid transparent",
-                background: "transparent",
-                border: "none",
-                borderBottom: isActive
-                  ? `2px solid ${B.primary}`
-                  : "2px solid transparent",
-                cursor: "pointer",
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                transition: "color 0.2s",
-              }}
-            >
-              {badge}
-            </button>
-          );
-        })}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Building2 size={14} color={B.primary} />
+          <span
+            style={{
+              fontFamily: B.sans,
+              fontSize: 11,
+              fontWeight: 700,
+              color: B.primary,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+            }}
+          >
+            All Projects
+          </span>
+        </div>
         <div
           style={{
             marginLeft: "auto",
@@ -589,7 +1223,7 @@ function FilterBar({
           }}
         >
           <span style={{ fontFamily: B.sans, fontSize: 12, color: B.muted }}>
-            {totalCount} {totalCount === 1 ? "property" : "properties"}
+            {totalCount} {totalCount === 1 ? "project" : "projects"}
           </span>
           <button
             onClick={resetFilters}
@@ -631,7 +1265,7 @@ function FilterBar({
             padding: "16px 20px",
           }}
         >
-          {colLabel("Keyword")}
+          {colLabel("Search Projects")}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Search size={14} color={B.accent} />
             <input
@@ -691,29 +1325,6 @@ function FilterBar({
           </div>
         </div>
 
-        {/* Type */}
-        <div
-          style={{
-            flex: 1,
-            borderRight: `1px solid ${B.beige}`,
-            padding: "16px 20px",
-          }}
-        >
-          {colLabel("Type")}
-          <div style={{ position: "relative" }}>
-            <select
-              style={selectStyle}
-              value={filters.type}
-              onChange={(e) => setFilter("type", e.target.value)}
-            >
-              {typeCategories.map((t) => (
-                <option key={t}>{t}</option>
-              ))}
-            </select>
-            {chevron}
-          </div>
-        </div>
-
         {/* Sort */}
         <div
           style={{
@@ -764,70 +1375,42 @@ function FilterBar({
           <Search size={15} /> Search
         </button>
       </div>
+    </div>
+  );
+}
 
-      {/* Type pill tabs */}
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          padding: "14px 24px",
-          flexWrap: "wrap",
-          alignItems: "center",
-        }}
-      >
-        <span
-          style={{
-            fontFamily: B.sans,
-            fontSize: 10,
-            color: B.accent,
-            marginRight: 4,
-            textTransform: "uppercase",
-            letterSpacing: "0.2em",
-            fontWeight: 700,
-          }}
-        >
-          Filter:
-        </span>
-        {typeCategories.map((t) => (
-          <button
-            key={t}
-            onClick={() => setFilter("type", t)}
-            style={{
-              fontFamily: B.sans,
-              fontSize: 12,
-              fontWeight: t === filters.type ? 700 : 400,
-              padding: "6px 16px",
-              borderRadius: 99,
-              border:
-                t === filters.type
-                  ? "none"
-                  : `1.5px solid rgba(212,175,55,0.40)`,
-              background: t === filters.type ? B.grad : "transparent",
-              color: t === filters.type ? B.white : B.muted,
-              cursor: "pointer",
-              transition: "all 0.22s",
-              boxShadow:
-                t === filters.type ? "0 4px 16px rgba(10,17,114,0.20)" : "none",
-            }}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
+// ─── Masonry Section ──────────────────────────────────────────────────────────
+function MasonrySection({ items, onAction }) {
+  if (!items.length) return null;
+
+  return (
+    <div className="masonry-grid">
+      {items.map((p, i) => {
+        const span = spanPattern[i % spanPattern.length];
+        return (
+          <ProjectCard
+            key={p._id}
+            property={p}
+            spanCol={span.col}
+            spanRow={span.row}
+            onAction={onAction}
+          />
+        );
+      })}
     </div>
   );
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function Listings() {
+export default function Projects() {
   const [heroBg, setHeroBg] = useState(0);
   const [heroOffset, setHeroOffset] = useState(0);
   const [activeProperty, setActiveProperty] = useState(null);
   const heroRef = useRef(null);
 
   const {
-    properties,
-    typeCategories,
+    completed,
+    inProgress,
     loading,
     loadingMore,
     error,
@@ -838,7 +1421,9 @@ export default function Listings() {
     loadMore,
     refetch,
     totalCount,
-  } = useListings({ limit: 12 });
+    completedCount,
+    inProgressCount,
+  } = useProjects({ limit: 18 });
 
   /* Hero parallax */
   useEffect(() => {
@@ -861,17 +1446,21 @@ export default function Listings() {
     return () => clearInterval(t);
   }, []);
 
+  const hasCompleted = completed.length > 0;
+  const hasInProgress = inProgress.length > 0;
+
   return (
     <div style={{ background: B.white, minHeight: "100vh" }}>
       <style>{`
         @keyframes heroFadeIn { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
         @keyframes shimmer { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
-        .listings-hero-text { animation: heroFadeIn 0.9s cubic-bezier(0.22,1,0.36,1) forwards; }
+        .projects-hero-text { animation: heroFadeIn 0.9s cubic-bezier(0.22,1,0.36,1) forwards; }
         .masonry-grid {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
           grid-auto-rows: 240px;
           gap: 18px;
+          margin-bottom: 0;
         }
         @media (max-width: 1024px) {
           .masonry-grid { grid-template-columns: repeat(2, 1fr); grid-auto-rows: 220px; }
@@ -892,8 +1481,8 @@ export default function Listings() {
         ref={heroRef}
         style={{
           position: "relative",
-          height: "60vh",
-          minHeight: 440,
+          height: "62vh",
+          minHeight: 460,
           overflow: "hidden",
         }}
       >
@@ -921,17 +1510,14 @@ export default function Listings() {
           </div>
         ))}
 
-        {/* Navy overlay — toned down */}
         <div
           style={{
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(110deg, rgba(10,17,114,0.72) 0%, rgba(26,58,92,0.52) 45%, rgba(10,17,114,0.18) 100%)",
+              "linear-gradient(110deg, rgba(10,17,114,0.80) 0%, rgba(26,58,92,0.58) 45%, rgba(10,17,114,0.20) 100%)",
           }}
         />
-
-        {/* Gold radial glow */}
         <div
           style={{
             position: "absolute",
@@ -944,7 +1530,7 @@ export default function Listings() {
 
         {/* Hero text */}
         <div
-          className="listings-hero-text"
+          className="projects-hero-text"
           style={{
             position: "absolute",
             inset: 0,
@@ -987,7 +1573,7 @@ export default function Listings() {
                 textTransform: "uppercase",
               }}
             >
-              All Listings
+              Projects
             </span>
           </div>
 
@@ -1017,7 +1603,7 @@ export default function Listings() {
                 textTransform: "uppercase",
               }}
             >
-              Slendor Holdings
+              Splendor Holdings
             </span>
           </div>
 
@@ -1032,7 +1618,7 @@ export default function Listings() {
               textShadow: "0 4px 32px rgba(10,17,114,0.4)",
             }}
           >
-            All Properties
+            Our Projects
           </h1>
 
           <p
@@ -1041,13 +1627,13 @@ export default function Listings() {
               fontSize: "clamp(1rem, 1.8vw, 1.35rem)",
               fontStyle: "italic",
               color: "rgba(212,175,55,0.90)",
-              maxWidth: 480,
+              maxWidth: 520,
               lineHeight: 1.7,
               textShadow: "0 2px 16px rgba(10,17,114,0.3)",
             }}
           >
-            Browse our curated collection of Kenya's finest homes, villas,
-            apartments, and land
+            Landmark developments shaping Kenya's skyline — from completed
+            masterpieces to bold works in progress
           </p>
 
           {/* Stats */}
@@ -1055,14 +1641,26 @@ export default function Listings() {
             style={{
               display: "flex",
               gap: 32,
-              marginTop: 28,
+              marginTop: 32,
               flexWrap: "wrap",
             }}
           >
             {[
-              { num: String(totalCount), label: "Active Listings" },
-              { num: "KES 5B+", label: "Properties Sold" },
-              { num: "7", label: "Counties" },
+              {
+                num: String(totalCount),
+                label: "Total Projects",
+                icon: Building2,
+              },
+              {
+                num: String(completedCount),
+                label: "Completed",
+                icon: CheckCheck,
+              },
+              {
+                num: String(inProgressCount),
+                label: "In Progress",
+                icon: TrendingUp,
+              },
             ].map((s, i) => (
               <div
                 key={i}
@@ -1087,7 +1685,7 @@ export default function Listings() {
                       lineHeight: 1,
                     }}
                   >
-                    {s.num}
+                    {loading ? "—" : s.num}
                   </div>
                   <div
                     style={{
@@ -1133,7 +1731,7 @@ export default function Listings() {
         </div>
       </section>
 
-      {/* ── Filter + Grid ── */}
+      {/* ── Content ── */}
       <div
         style={{
           maxWidth: 1440,
@@ -1141,6 +1739,7 @@ export default function Listings() {
           padding: "clamp(1.5rem, 4vw, 3rem) clamp(1rem, 3vw, 2.5rem)",
         }}
       >
+        {/* Sticky filter */}
         <div
           style={{
             position: "sticky",
@@ -1155,7 +1754,6 @@ export default function Listings() {
             filters={filters}
             setFilter={setFilter}
             resetFilters={resetFilters}
-            typeCategories={typeCategories}
             totalCount={totalCount}
           />
         </div>
@@ -1198,80 +1796,151 @@ export default function Listings() {
         )}
 
         {/* Empty */}
-        {!error && !loading && properties.length === 0 && (
-          <div style={{ textAlign: "center", padding: "80px 0" }}>
+        {!error &&
+          !loading &&
+          completed.length === 0 &&
+          inProgress.length === 0 && (
+            <div style={{ textAlign: "center", padding: "80px 0" }}>
+              <Building2
+                size={48}
+                color={B.accent}
+                style={{ marginBottom: 16, opacity: 0.5 }}
+              />
+              <div
+                style={{
+                  fontFamily: B.serif,
+                  fontSize: "2rem",
+                  color: B.accent,
+                  marginBottom: 12,
+                }}
+              >
+                No projects found
+              </div>
+              <p
+                style={{
+                  fontFamily: B.sans,
+                  color: B.muted,
+                  fontSize: 14,
+                  marginBottom: 20,
+                }}
+              >
+                Try adjusting your filters above
+              </p>
+              <button
+                onClick={resetFilters}
+                style={{
+                  padding: "10px 28px",
+                  borderRadius: 99,
+                  border: "none",
+                  background: B.grad,
+                  color: B.white,
+                  fontFamily: B.sans,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <RotateCcw size={13} /> Reset Filters
+              </button>
+            </div>
+          )}
+
+        {/* Loading skeletons */}
+        {!error && loading && (
+          <div className="masonry-grid">
+            {Array.from({ length: 9 }).map((_, i) => {
+              const span = spanPattern[i % spanPattern.length];
+              return (
+                <SkeletonCard key={i} spanCol={span.col} spanRow={span.row} />
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Completed Projects Section ── */}
+        {!error && !loading && hasCompleted && (
+          <section style={{ marginBottom: 72 }}>
+            <SectionHeader
+              icon={CheckCheck}
+              title="Completed Projects"
+              count={completedCount}
+              color={B.completedBadge}
+              subtitle="Delivered developments ready for handover or occupancy"
+            />
+            <MasonrySection items={completed} onAction={setActiveProperty} />
+          </section>
+        )}
+
+        {/* Divider between sections */}
+        {!error && !loading && hasCompleted && hasInProgress && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 20,
+              marginBottom: 64,
+            }}
+          >
             <div
               style={{
-                fontFamily: B.serif,
-                fontSize: "2rem",
-                color: B.accent,
-                marginBottom: 12,
+                flex: 1,
+                height: 1,
+                background: `linear-gradient(90deg, transparent, ${B.beige})`,
               }}
-            >
-              No properties found
-            </div>
-            <p
+            />
+            <div
               style={{
-                fontFamily: B.sans,
-                color: B.muted,
-                fontSize: 14,
-                marginBottom: 20,
-              }}
-            >
-              Try adjusting your filters above
-            </p>
-            <button
-              onClick={resetFilters}
-              style={{
-                padding: "10px 28px",
-                borderRadius: 99,
-                border: "none",
-                background: B.grad,
-                color: B.white,
-                fontFamily: B.sans,
-                fontSize: 13,
-                fontWeight: 700,
-                cursor: "pointer",
-                display: "inline-flex",
+                display: "flex",
                 alignItems: "center",
-                gap: 6,
+                gap: 8,
+                padding: "8px 20px",
+                border: `1px solid ${B.beige}`,
+                borderRadius: 99,
+                background: B.white,
               }}
             >
-              <RotateCcw size={13} /> Reset Filters
-            </button>
+              <TrendingUp size={13} color={B.accent} />
+              <span
+                style={{
+                  fontFamily: B.sans,
+                  fontSize: 11,
+                  color: B.muted,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  fontWeight: 700,
+                }}
+              >
+                Active Developments
+              </span>
+            </div>
+            <div
+              style={{
+                flex: 1,
+                height: 1,
+                background: `linear-gradient(90deg, ${B.beige}, transparent)`,
+              }}
+            />
           </div>
         )}
 
-        {/* Masonry grid */}
-        {!error && (loading || properties.length > 0) && (
-          <div className="masonry-grid">
-            {loading
-              ? Array.from({ length: 9 }).map((_, i) => {
-                  const span = spanPattern[i % spanPattern.length];
-                  return (
-                    <SkeletonCard
-                      key={i}
-                      spanCol={span.col}
-                      spanRow={span.row}
-                    />
-                  );
-                })
-              : properties.map((p, i) => {
-                  const span = spanPattern[i % spanPattern.length];
-                  return (
-                    <ListingCard
-                      key={p._id}
-                      property={p}
-                      spanCol={span.col}
-                      spanRow={span.row}
-                      onAction={setActiveProperty}
-                    />
-                  );
-                })}
-          </div>
+        {/* ── In Progress Section ── */}
+        {!error && !loading && hasInProgress && (
+          <section style={{ marginBottom: 64 }}>
+            <SectionHeader
+              icon={Clock}
+              title="Projects In Progress"
+              count={inProgressCount}
+              color={B.inProgressBadge}
+              subtitle="Exciting developments currently under construction"
+            />
+            <MasonrySection items={inProgress} onAction={setActiveProperty} />
+          </section>
         )}
 
-        {/* Load more */}
+        {/* Load More */}
         {!error && !loading && (hasMore || loadingMore) && (
           <div style={{ textAlign: "center", marginTop: 64 }}>
             <button
@@ -1312,12 +1981,20 @@ export default function Listings() {
                   <Loader2 size={14} className="spin" /> Loading…
                 </>
               ) : (
-                "Load More Properties"
+                "Load More Projects"
               )}
             </button>
           </div>
         )}
       </div>
+
+      {/* Action modal */}
+      {activeProperty && (
+        <ActionModal
+          property={activeProperty}
+          onClose={() => setActiveProperty(null)}
+        />
+      )}
     </div>
   );
 }

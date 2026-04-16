@@ -15,7 +15,6 @@ import {
   X,
   Bed,
   Bath,
-  Maximize2,
 } from "lucide-react";
 import axios from "axios";
 
@@ -30,7 +29,8 @@ if (!document.querySelector("#slendor-contact-fonts")) {
 
 const API_BASE_URL = "https://splendorholdings-2v47.vercel.app/api/v1";
 
-const interests = [
+// ── Must exactly match the enum in the Inquiry model ─────────────────────────
+const INQUIRY_TYPE_OPTIONS = [
   "Buying a Property",
   "Renting a Property",
   "Selling My Property",
@@ -38,7 +38,16 @@ const interests = [
   "Property Valuation",
   "Property Management",
   "General Enquiry",
+  "Viewing Request",
+  "Price Inquiry",
+  "Offer Intent",
+  "Information",
 ];
+
+// Display labels → inquiry type enum values
+// If a label already matches the enum, it passes through as-is.
+// This map only exists so the <select> options read naturally to users.
+const INTEREST_DISPLAY = INQUIRY_TYPE_OPTIONS; // they're already user-friendly
 
 const contactDetails = [
   {
@@ -73,7 +82,7 @@ const contactDetails = [
   },
 ];
 
-function useReveal(delay = 0) {
+function useReveal() {
   const [vis, setVis] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -86,7 +95,7 @@ function useReveal(delay = 0) {
     if (ref.current) obs.observe(ref.current);
     return () => obs.disconnect();
   }, []);
-  return [ref, vis, delay];
+  return [ref, vis];
 }
 
 /* ── Property search dropdown ── */
@@ -97,9 +106,7 @@ function PropertyPicker({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
   const containerRef = useRef(null);
-  const debounceRef = useRef(null);
 
-  // Fetch all properties on mount
   useEffect(() => {
     const fetchAll = async () => {
       setLoading(true);
@@ -111,7 +118,7 @@ function PropertyPicker({ value, onChange }) {
           res.data?.properties ||
           [];
         setProperties(Array.isArray(data) ? data : []);
-      } catch (e) {
+      } catch {
         setProperties([]);
       } finally {
         setLoading(false);
@@ -120,11 +127,11 @@ function PropertyPicker({ value, onChange }) {
     fetchAll();
   }, []);
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
         setOpen(false);
+        setFocused(false);
       }
     };
     document.addEventListener("mousedown", handler);
@@ -142,13 +149,11 @@ function PropertyPicker({ value, onChange }) {
   });
 
   const selected = value ? properties.find((p) => p._id === value) : null;
-
   const borderColor = focused ? "#c2884a" : "#e2d5c8";
   const glow = focused ? "0 0 0 3px rgba(194,136,74,0.12)" : "none";
 
   return (
     <div ref={containerRef} style={{ position: "relative" }}>
-      {/* Trigger */}
       <div
         onClick={() => {
           setOpen((o) => !o);
@@ -249,7 +254,6 @@ function PropertyPicker({ value, onChange }) {
         </div>
       </div>
 
-      {/* Dropdown */}
       {open && (
         <div
           style={{
@@ -268,7 +272,6 @@ function PropertyPicker({ value, onChange }) {
             overflow: "hidden",
           }}
         >
-          {/* Search box */}
           <div
             style={{
               padding: "10px 12px",
@@ -308,8 +311,6 @@ function PropertyPicker({ value, onChange }) {
               </button>
             )}
           </div>
-
-          {/* List */}
           <div style={{ overflowY: "auto", flex: 1 }}>
             {loading ? (
               <div
@@ -367,7 +368,6 @@ function PropertyPicker({ value, onChange }) {
                         e.currentTarget.style.background = "transparent";
                     }}
                   >
-                    {/* Thumbnail */}
                     <div
                       style={{
                         width: 48,
@@ -402,7 +402,6 @@ function PropertyPicker({ value, onChange }) {
                         </div>
                       )}
                     </div>
-
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div
                         style={{
@@ -464,7 +463,6 @@ function PropertyPicker({ value, onChange }) {
                         )}
                       </div>
                     </div>
-
                     <div
                       style={{
                         fontFamily: "'Cormorant Garamond', serif",
@@ -504,7 +502,6 @@ function Field({
   const active = focused || (value && value.length > 0);
   const isSelect = type === "select";
   const isTextarea = type === "textarea";
-
   const borderColor = focused ? "#c2884a" : "#e2d5c8";
   const glow = focused ? "0 0 0 3px rgba(194,136,74,0.12)" : "none";
 
@@ -660,15 +657,18 @@ export default function Contact() {
     setSending(true);
     setSendError("");
     try {
-      const token = localStorage.getItem("token");
+      // Auth.jsx stores the token as "accessToken"
+      const token = localStorage.getItem("accessToken");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
       const payload = {
         name: form.name,
         email: form.email,
-        phone: form.phone,
+        phone: form.phone || undefined,
         message: form.message,
-        inquiryType: form.interest || "general",
+        // form.interest is already a valid enum value from INQUIRY_TYPE_OPTIONS,
+        // or falls back to "General Enquiry" if none was selected.
+        inquiryType: form.interest || "General Enquiry",
         ...(selectedPropertyId ? { property: selectedPropertyId } : {}),
       };
 
@@ -684,8 +684,8 @@ export default function Contact() {
     }
   };
 
-  const [cardRef, cardVis] = useReveal(0);
-  const [formRef2, formVis] = useReveal(150);
+  const [cardRef, cardVis] = useReveal();
+  const [formRef2, formVis] = useReveal();
 
   return (
     <div
@@ -697,7 +697,6 @@ export default function Contact() {
     >
       <style>{`
         @keyframes fadeUp   { from { opacity:0; transform:translateY(32px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes pulse    { 0%,100%{ opacity:1; } 50%{ opacity:0.5; } }
         @keyframes spin     { to { transform:rotate(360deg); } }
         @keyframes popIn    { from{ opacity:0; transform:scale(0.85); } to{ opacity:1; transform:scale(1); } }
         .contact-grid {
@@ -1562,7 +1561,7 @@ export default function Contact() {
                       type="select"
                       value={form.interest}
                       onChange={set("interest")}
-                      options={interests}
+                      options={INTEREST_DISPLAY}
                     />
                   </div>
 
@@ -1637,7 +1636,9 @@ export default function Contact() {
 
                   <button
                     onClick={submit}
-                    disabled={sending}
+                    disabled={
+                      sending || !form.name || !form.email || !form.message
+                    }
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -1655,12 +1656,17 @@ export default function Contact() {
                       fontWeight: 600,
                       letterSpacing: "0.12em",
                       textTransform: "uppercase",
-                      cursor: sending ? "not-allowed" : "pointer",
+                      cursor:
+                        sending || !form.name || !form.email || !form.message
+                          ? "not-allowed"
+                          : "pointer",
                       width: "100%",
                       boxShadow: sending
                         ? "none"
                         : "0 8px 32px rgba(194,136,74,0.30)",
                       transition: "all 0.3s ease",
+                      opacity:
+                        !form.name || !form.email || !form.message ? 0.6 : 1,
                     }}
                     onMouseEnter={(e) => {
                       if (!sending)

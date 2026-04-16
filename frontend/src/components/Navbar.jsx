@@ -19,7 +19,7 @@ const OFFWHITE = "#FAFAF8";
 
 const navLinks = [
   { label: "Properties", href: "/listings" },
-  { label: "Looking for Land?", href: "/land" },
+  { label: "Looking for Land?", href: "/looking-for-a-piece-of-land" },
   { label: "Projects", href: "/projects" },
   { label: "Services", href: "/services" },
   { label: "About", href: "/about-us" },
