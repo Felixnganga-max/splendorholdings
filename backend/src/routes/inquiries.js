@@ -4,6 +4,7 @@ const router = express.Router();
 const {
   getInquiries,
   getInquiry,
+  getInquiryStats,
   createInquiry,
   replyToInquiry,
   assignInquiry,
@@ -20,10 +21,10 @@ const {
   validate,
 } = require("../utils/validators");
 
-// ── POST /api/v1/inquiries
-// Public endpoint — guests must supply guestEmail; logged-in users auto-attached.
-// optionalAuth attaches req.user if a valid Bearer token is present, but
-// does NOT reject unauthenticated requests.
+// ── POST /api/v1/inquiries ────────────────────────────────────────────────────
+// Public — guests submit from Contact.jsx; registered users optionally attached.
+// optionalAuth attaches req.user if a valid Bearer token is present but does NOT
+// reject unauthenticated requests.
 router.post(
   "/",
   inquiryLimiter,
@@ -36,15 +37,19 @@ router.post(
 // All routes below require a valid JWT
 router.use(protect);
 
-// ── GET /api/v1/inquiries
+// ── GET /api/v1/inquiries/stats ───────────────────────────────────────────────
+// admin/manager only — unread count + breakdown for dashboard badge
+router.get("/stats", authorize("admin", "manager"), getInquiryStats);
+
+// ── GET /api/v1/inquiries ─────────────────────────────────────────────────────
 // admin/manager → all | user → only their own submissions
 router.get("/", paginationRules, validate, getInquiries);
 
-// ── GET /api/v1/inquiries/:id
+// ── GET /api/v1/inquiries/:id ─────────────────────────────────────────────────
 router.get("/:id", mongoIdRule, validate, getInquiry);
 
-// ── POST /api/v1/inquiries/:id/reply
-// admin/manager only — send a reply via email, SMS, or internal note
+// ── POST /api/v1/inquiries/:id/reply ─────────────────────────────────────────
+// admin/manager only — reply via email, SMS, or internal note
 router.post(
   "/:id/reply",
   authorize("admin", "manager"),
@@ -54,8 +59,7 @@ router.post(
   replyToInquiry,
 );
 
-// ── PATCH /api/v1/inquiries/:id/assign
-// admin/manager only — assign inquiry to a staff member
+// ── PATCH /api/v1/inquiries/:id/assign ───────────────────────────────────────
 router.patch(
   "/:id/assign",
   authorize("admin", "manager"),
@@ -64,8 +68,7 @@ router.patch(
   assignInquiry,
 );
 
-// ── PATCH /api/v1/inquiries/:id/archive
-// admin/manager only — archive a handled inquiry
+// ── PATCH /api/v1/inquiries/:id/archive ──────────────────────────────────────
 router.patch(
   "/:id/archive",
   authorize("admin", "manager"),

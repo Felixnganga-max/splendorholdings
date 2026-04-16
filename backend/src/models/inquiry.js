@@ -5,16 +5,26 @@ const INQUIRY_TYPES = [
   "Price Inquiry",
   "Offer Intent",
   "Information",
+  "Buying a Property",
+  "Renting a Property",
+  "Selling My Property",
+  "Off-Plan Investment",
+  "Property Valuation",
+  "Property Management",
+  "General Enquiry",
 ];
+
 const INQUIRY_STATUSES = ["unread", "read", "replied", "archived"];
 
 const inquirySchema = new mongoose.Schema(
   {
+    // Property is OPTIONAL — contact form submissions may not reference one
     property: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Property",
-      required: [true, "Property reference is required"],
+      default: null,
     },
+
     // Registered user OR anonymous guest
     sender: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     guestName: { type: String, trim: true, maxlength: 100 },
@@ -30,7 +40,7 @@ const inquirySchema = new mongoose.Schema(
     type: {
       type: String,
       enum: { values: INQUIRY_TYPES, message: "Invalid inquiry type" },
-      default: "Information",
+      default: "General Enquiry",
     },
     message: {
       type: String,
@@ -60,6 +70,10 @@ const inquirySchema = new mongoose.Schema(
       },
     ],
     assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+
+    // Auto-acknowledgement tracking
+    autoReplySent: { type: Boolean, default: false },
+
     // IP for spam / rate-limit tracking
     senderIP: { type: String, select: false },
   },
@@ -70,12 +84,13 @@ const inquirySchema = new mongoose.Schema(
   },
 );
 
-// ── Indexes ───────────────────────────────────────────────────────────────────
+// ── Indexes ────────────────────────────────────────────────────────────────────
 inquirySchema.index({ property: 1 });
 inquirySchema.index({ sender: 1 });
 inquirySchema.index({ status: 1 });
 inquirySchema.index({ type: 1 });
 inquirySchema.index({ createdAt: -1 });
+inquirySchema.index({ guestEmail: 1 });
 
 // ── Virtual: display name ──────────────────────────────────────────────────────
 inquirySchema.virtual("displayName").get(function () {

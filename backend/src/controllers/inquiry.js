@@ -9,22 +9,40 @@ const {
   badRequest,
 } = require("../utils/response");
 const { asyncHandler } = require("../utils/errorHandler");
-const { getIO } = require("../sockets/sockets");
+const {
+  sendCustomerAck,
+  sendAdminNotification,
+  sendReplyToCustomer,
+} = require("../utils/emailService");
 
-/**
- * GET /api/v1/inquiries
- * admin/manager — all; user — their own submissions only.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/inquiries
+// admin/manager → all   |   user → their own submissions
+// ─────────────────────────────────────────────────────────────────────────────
 const getInquiries = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 20, status, type, sort = "-createdAt" } = req.query;
-  const skip = (Number(page) - 1) * Number(limit);
+  const {
+    page = 1,
+    limit = 20,
+    status,
+    type,
+    sort = "-createdAt",
+    search,
+  } = req.query;
 
+  const skip = (Number(page) - 1) * Number(limit);
   const filter = {};
+
   if (!["admin", "manager"].includes(req.user.role)) {
     filter.sender = req.user._id;
   }
   if (status) filter.status = status;
   if (type) filter.type = type;
+
+  // Free-text search across guest name / email
+  if (search) {
+    const re = new RegExp(search, "i");
+    filter.$or = [{ guestName: re }, { guestEmail: re }];
+  }
 
   const [inquiries, total] = await Promise.all([
     Inquiry.find(filter)
@@ -50,9 +68,39 @@ const getInquiries = asyncHandler(async (req, res) => {
   );
 });
 
-/**
- * GET /api/v1/inquiries/:id
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/inquiries/stats
+// admin/manager — unread count + breakdown by type
+// ─────────────────────────────────────────────────────────────────────────────
+const getInquiryStats = asyncHandler(async (req, res) => {
+  const [statusCounts, typeCounts] = await Promise.all([
+    Inquiry.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
+    Inquiry.aggregate([{ $group: { _id: "$type", count: { $sum: 1 } } }]),
+  ]);
+
+  const stats = {
+    total: 0,
+    unread: 0,
+    byStatus: {},
+    byType: {},
+  };
+
+  statusCounts.forEach(({ _id, count }) => {
+    stats.byStatus[_id] = count;
+    stats.total += count;
+    if (_id === "unread") stats.unread = count;
+  });
+
+  typeCounts.forEach(({ _id, count }) => {
+    stats.byType[_id] = count;
+  });
+
+  return success(res, { stats });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/v1/inquiries/:id
+// ─────────────────────────────────────────────────────────────────────────────
 const getInquiry = asyncHandler(async (req, res) => {
   const inquiry = await Inquiry.findById(req.params.id)
     .populate("property", "name location type price priceLabel")
@@ -68,7 +116,7 @@ const getInquiry = asyncHandler(async (req, res) => {
     return forbidden(res, "Not authorised to view this inquiry.");
   }
 
-  // Mark as read if admin/manager views it
+  // Mark as read when admin/manager opens it
   if (isAdminOrManager && inquiry.status === "unread") {
     inquiry.status = "read";
     await inquiry.save();
@@ -77,67 +125,104 @@ const getInquiry = asyncHandler(async (req, res) => {
   return success(res, { inquiry });
 });
 
-/**
- * POST /api/v1/inquiries
- * Public (with optional auth) — submit an inquiry.
- * Guest users provide name/email/phone fields.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/inquiries
+// Public (optionalAuth). Accepts both:
+//   - Contact form payload: { name, email, phone, message, inquiryType, property? }
+//   - Legacy payload:       { guestName, guestEmail, guestPhone, message, type, propertyId? }
+// ─────────────────────────────────────────────────────────────────────────────
 const createInquiry = asyncHandler(async (req, res) => {
-  const { propertyId, message, type, guestName, guestEmail, guestPhone } =
-    req.body;
-
-  const property = await Property.findById(propertyId);
-  if (!property) return notFound(res, "Property not found.");
-
-  // Guests must provide contact info
-  if (!req.user && !guestEmail) {
-    return badRequest(res, "Guest email is required when not logged in.");
-  }
-
-  const inquiry = await Inquiry.create({
-    property: propertyId,
-    sender: req.user?._id,
+  // ── Normalise field names from contact form ──
+  const {
+    // Contact.jsx sends these:
+    name,
+    email,
+    phone,
+    inquiryType,
+    // Legacy / direct API sends these:
     guestName,
     guestEmail,
     guestPhone,
+    type,
+    // Both:
     message,
-    type: type || "Information",
+    property: propertyId,
+  } = req.body;
+
+  const resolvedName = name || guestName || req.user?.firstName || null;
+  const resolvedEmail = email || guestEmail || req.user?.email || null;
+  const resolvedPhone = phone || guestPhone || null;
+  const resolvedType = inquiryType || type || "General Enquiry";
+
+  // Must have at minimum an email to reply to
+  if (!resolvedEmail && !req.user) {
+    return badRequest(res, "An email address is required.");
+  }
+
+  if (!message) {
+    return badRequest(res, "Message is required.");
+  }
+
+  // ── Optional property lookup ──
+  let property = null;
+  if (propertyId) {
+    property = await Property.findById(propertyId).select("name location");
+    if (!property) return notFound(res, "Property not found.");
+  }
+
+  // ── Create inquiry ──
+  const inquiry = await Inquiry.create({
+    property: property?._id || null,
+    sender: req.user?._id || null,
+    guestName: resolvedName,
+    guestEmail: resolvedEmail,
+    guestPhone: resolvedPhone,
+    message,
+    type: resolvedType,
     senderIP: req.ip,
   });
 
-  await inquiry.populate("property", "name location");
+  // ── Fire-and-forget emails (don't block the response) ──
+  const customerName = resolvedName || resolvedEmail;
+  const customerEmail = resolvedEmail;
 
-  // Real-time alert to admin/manager rooms
-  try {
-    const displayName = req.user ? req.user.fullName : guestName || guestEmail;
-    getIO()
-      .to("role:admin")
-      .to("role:manager")
-      .emit("inquiry:new", {
-        inquiry: {
-          id: inquiry._id,
-          propertyName: inquiry.property.name,
-          type: inquiry.type,
-          displayName,
-          createdAt: inquiry.createdAt,
-        },
-      });
-  } catch (_) {}
+  // 1. Customer acknowledgement
+  sendCustomerAck({
+    name: customerName,
+    email: customerEmail,
+    message,
+    inquiryType: resolvedType,
+    property,
+  }).catch((err) => console.error("[email] Customer ack failed:", err.message));
+
+  // 2. Admin / Sally notification
+  sendAdminNotification({
+    name: customerName,
+    email: customerEmail,
+    phone: resolvedPhone,
+    message,
+    inquiryType: resolvedType,
+    property,
+    inquiryId: inquiry._id.toString(),
+  }).catch((err) =>
+    console.error("[email] Admin notification failed:", err.message),
+  );
+
+  await inquiry.populate("property", "name location");
 
   return created(res, { inquiry }, "Your inquiry has been sent.");
 });
 
-/**
- * POST /api/v1/inquiries/:id/reply
- * admin/manager — reply to an inquiry.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/v1/inquiries/:id/reply
+// admin/manager — reply and send email to customer
+// ─────────────────────────────────────────────────────────────────────────────
 const replyToInquiry = asyncHandler(async (req, res) => {
   const { body, channel = "email" } = req.body;
 
-  const inquiry = await Inquiry.findById(req.params.id).populate(
-    "sender",
-    "firstName lastName email",
-  );
+  const inquiry = await Inquiry.findById(req.params.id)
+    .populate("sender", "firstName lastName email")
+    .populate("property", "name location");
 
   if (!inquiry) return notFound(res, "Inquiry not found.");
 
@@ -145,24 +230,33 @@ const replyToInquiry = asyncHandler(async (req, res) => {
   inquiry.status = "replied";
   await inquiry.save();
 
-  // Notify the sender in real-time if they are a registered user
-  try {
-    if (inquiry.sender) {
-      getIO().to(`user:${inquiry.sender._id}`).emit("inquiry:replied", {
-        inquiryId: inquiry._id,
-        propertyId: inquiry.property,
-        message: "You have a new reply to your inquiry.",
-      });
+  // Send email reply to customer if channel is email
+  if (channel === "email") {
+    const customerEmail = inquiry.sender?.email || inquiry.guestEmail;
+    const customerName = inquiry.sender
+      ? `${inquiry.sender.firstName} ${inquiry.sender.lastName}`
+      : inquiry.guestName || inquiry.guestEmail || "Valued Client";
+    const staffName = `${req.user.firstName} ${req.user.lastName}`;
+
+    if (customerEmail) {
+      sendReplyToCustomer({
+        customerName,
+        customerEmail,
+        replyBody: body,
+        staffName,
+        property: inquiry.property,
+      }).catch((err) =>
+        console.error("[email] Reply send failed:", err.message),
+      );
     }
-  } catch (_) {}
+  }
 
   return success(res, { inquiry }, "Reply sent.");
 });
 
-/**
- * PATCH /api/v1/inquiries/:id/assign
- * admin/manager — assign inquiry to a staff member.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// PATCH /api/v1/inquiries/:id/assign
+// ─────────────────────────────────────────────────────────────────────────────
 const assignInquiry = asyncHandler(async (req, res) => {
   const { userId } = req.body;
   const inquiry = await Inquiry.findByIdAndUpdate(
@@ -175,10 +269,9 @@ const assignInquiry = asyncHandler(async (req, res) => {
   return success(res, { inquiry }, "Inquiry assigned.");
 });
 
-/**
- * PATCH /api/v1/inquiries/:id/archive
- * admin/manager — archive an inquiry.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// PATCH /api/v1/inquiries/:id/archive
+// ─────────────────────────────────────────────────────────────────────────────
 const archiveInquiry = asyncHandler(async (req, res) => {
   const inquiry = await Inquiry.findByIdAndUpdate(
     req.params.id,
@@ -192,6 +285,7 @@ const archiveInquiry = asyncHandler(async (req, res) => {
 module.exports = {
   getInquiries,
   getInquiry,
+  getInquiryStats,
   createInquiry,
   replyToInquiry,
   assignInquiry,
