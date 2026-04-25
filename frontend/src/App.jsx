@@ -12,6 +12,8 @@ import Auth from "./pages/Auth";
 import Services from "./pages/Services";
 import Projects from "./pages/Projects";
 import Lands from "./pages/Lands";
+import LandDetail from "./pages/LandDetail";
+import ProjectDetail from "./pages/ProjectDetail";
 
 function App() {
   const location = useLocation();
@@ -30,7 +32,9 @@ function App() {
         <Route path="/authentication" element={<Auth />} />
         <Route path="/services" element={<Services />} />
         <Route path="/projects" element={<Projects />} />
-        <Route path="/looking-for-a-piece-of-land"element={<Lands />} />
+        <Route path="/looking-for-a-piece-of-land" element={<Lands />} />
+        <Route path="/lands/:id" element={<LandDetail />} />
+        <Route path="/projects/:id" element={<ProjectDetail />} />
       </Routes>
       {!isDashboard && <Footer />}
     </>

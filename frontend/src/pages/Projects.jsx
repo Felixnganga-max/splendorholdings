@@ -20,6 +20,7 @@ import {
   CheckCheck,
   TrendingUp,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 // ─── Brand Tokens (mirrors Listings) ─────────────────────────────────────────
 const B = {
@@ -1425,6 +1426,8 @@ export default function Projects() {
     inProgressCount,
   } = useProjects({ limit: 18 });
 
+  const navigate = useNavigate();
+
   /* Hero parallax */
   useEffect(() => {
     const onScroll = () => {
@@ -1870,7 +1873,10 @@ export default function Projects() {
               color={B.completedBadge}
               subtitle="Delivered developments ready for handover or occupancy"
             />
-            <MasonrySection items={completed} onAction={setActiveProperty} />
+            <MasonrySection
+              items={completed}
+              onAction={(p) => navigate(`/projects/${p.id}`)}
+            />
           </section>
         )}
 
@@ -1936,7 +1942,10 @@ export default function Projects() {
               color={B.inProgressBadge}
               subtitle="Exciting developments currently under construction"
             />
-            <MasonrySection items={inProgress} onAction={setActiveProperty} />
+            <MasonrySection
+              items={inProgress}
+              onAction={(p) => navigate(`/projects/${p.id}`)}
+            />
           </section>
         )}
 

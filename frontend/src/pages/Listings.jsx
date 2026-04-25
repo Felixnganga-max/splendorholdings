@@ -17,6 +17,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useListings, usePropertyActions } from "../Hooks/useListings";
+import { useNavigate } from "react-router-dom"; // Add this import
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const B = {
@@ -824,6 +825,7 @@ export default function Listings() {
   const [heroOffset, setHeroOffset] = useState(0);
   const [activeProperty, setActiveProperty] = useState(null);
   const heroRef = useRef(null);
+  const navigate = useNavigate(); // Add this
 
   const {
     properties,
@@ -1264,7 +1266,9 @@ export default function Listings() {
                       property={p}
                       spanCol={span.col}
                       spanRow={span.row}
-                      onAction={setActiveProperty}
+                      onAction={(property) =>
+                        navigate(`/property/${property.id}`)
+                      }
                     />
                   );
                 })}

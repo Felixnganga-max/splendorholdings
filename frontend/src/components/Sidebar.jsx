@@ -26,7 +26,7 @@ const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "properties", label: "Properties", icon: Layers },
   { id: "add-property", label: "Add Property", icon: PlusSquare },
-  { id: "inquiries", label: "Inquiries", icon: Bell, badge: 11 },
+  { id: "inquiries", label: "Inquiries", icon: Bell },
 ];
 
 const bottomItems = [

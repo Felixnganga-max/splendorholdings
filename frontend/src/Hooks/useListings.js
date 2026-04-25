@@ -31,41 +31,18 @@ const SORT_MAP = {
   "Featured First": "-isFeatured -createdAt",
 };
 
+// ─── Types to EXCLUDE from listings page ─────────────────────────────────────
+// These types have their own dedicated pages
+const EXCLUDED_TYPES = ["Land", "Project"];
+
 // ─── useListings ──────────────────────────────────────────────────────────────
-/**
- * Full-featured hook for the Listings page.
- *
- * Handles:
- *  - Server-side search (`?search=`), type (`?type=`), badge (`?badge=`)
- *  - Client-parsed location filter (location is part of the `location` string
- *    field — we filter client-side since the backend has no dedicated county param)
- *  - Server-side sort via SORT_MAP
- *  - Cursor-based "Load More" (appends to existing list)
- *  - Dynamic property-type categories from /api/v1/categories?kind=type
- *
- * @returns {{
- *   properties   : object[],
- *   typeCategories: string[],         // ["View All", ...labels]
- *   loading      : boolean,
- *   loadingMore  : boolean,
- *   error        : string|null,
- *   hasMore      : boolean,
- *   pagination   : object|null,
- *   filters      : object,            // current filter state
- *   setFilter    : (key, value) => void,
- *   resetFilters : () => void,
- *   loadMore     : () => void,
- *   refetch      : () => void,
- *   totalCount   : number,
- * }}
- */
 export function useListings({ limit = 12 } = {}) {
   // ── Filter state ───────────────────────────────────────────────────────────
   const DEFAULT_FILTERS = {
     keyword: "",
-    type: "View All", // maps to ?type=  (omit when "View All")
+    type: "View All",
     location: "All Locations",
-    badge: "Any Status", // maps to ?badge= (omit when "Any Status")
+    badge: "Any Status",
     sort: "Newest First",
   };
 
@@ -73,7 +50,7 @@ export function useListings({ limit = 12 } = {}) {
   const [typeCategories, setTypeCategories] = useState(["View All"]);
 
   // ── Data state ─────────────────────────────────────────────────────────────
-  const [allProperties, setAllProperties] = useState([]); // raw from API (before client location filter)
+  const [allProperties, setAllProperties] = useState([]);
   const [pagination, setPagination] = useState(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -81,7 +58,6 @@ export function useListings({ limit = 12 } = {}) {
   const [error, setError] = useState(null);
   const [tick, setTick] = useState(0);
 
-  // Track whether current fetch is a "load more" append vs fresh fetch
   const isAppend = useRef(false);
 
   const refetch = useCallback(() => {
@@ -98,7 +74,6 @@ export function useListings({ limit = 12 } = {}) {
 
   const setFilter = useCallback((key, value) => {
     setFilters((f) => ({ ...f, [key]: value }));
-    // Any filter change resets to page 1
     setPage(1);
     isAppend.current = false;
   }, []);
@@ -110,13 +85,16 @@ export function useListings({ limit = 12 } = {}) {
     setTick((n) => n + 1);
   }, []);
 
-  // ── Fetch type categories once ─────────────────────────────────────────────
+  // ── Fetch type categories (excluding Land & Project) ───────────────────────
   useEffect(() => {
     let cancelled = false;
     apiFetch("/api/v1/categories?kind=type")
       .then((json) => {
         if (cancelled) return;
-        const labels = (json.data?.categories ?? []).map((c) => c.label);
+        const labels = (json.data?.categories ?? [])
+          .map((c) => c.label)
+          // 🔴 EXCLUDE Land and Project from filter dropdown
+          .filter((label) => !EXCLUDED_TYPES.includes(label));
         setTypeCategories(["View All", ...labels]);
       })
       .catch(() => {
@@ -127,7 +105,7 @@ export function useListings({ limit = 12 } = {}) {
     };
   }, []);
 
-  // ── Fetch properties ───────────────────────────────────────────────────────
+  // ── Fetch properties (excluding Land & Project) ───────────────────────────
   useEffect(() => {
     let cancelled = false;
 
@@ -144,21 +122,54 @@ export function useListings({ limit = 12 } = {}) {
       sort: SORT_MAP[filters.sort] ?? "-createdAt",
     });
 
-    if (filters.type !== "View All") params.set("type", filters.type);
+    // 🔴 Only add type filter if it's not "View All" AND not an excluded type
+    if (filters.type !== "View All" && !EXCLUDED_TYPES.includes(filters.type)) {
+      params.set("type", filters.type);
+    }
+
     if (filters.badge !== "Any Status") params.set("badge", filters.badge);
     if (filters.keyword.trim()) params.set("search", filters.keyword.trim());
+
+    console.log("Fetching listings with params:", params.toString());
 
     apiFetch(`/api/v1/properties?${params.toString()}`)
       .then((json) => {
         if (cancelled) return;
-        const incoming = json.data?.properties ?? [];
-        setAllProperties((prev) =>
-          isAppend.current ? [...prev, ...incoming] : incoming,
+        let incoming = json.data?.properties ?? [];
+
+        // 🔴 CRITICAL: Filter out Land and Project types
+        const filteredIncoming = incoming.filter(
+          (prop) => !EXCLUDED_TYPES.includes(prop.type),
         );
-        setPagination(json.pagination ?? null);
+
+        console.log(
+          `Total from API: ${incoming.length}, After filtering: ${filteredIncoming.length}`,
+        );
+        console.log(
+          "Filtered out types:",
+          incoming
+            .filter((p) => EXCLUDED_TYPES.includes(p.type))
+            .map((p) => p.type),
+        );
+
+        setAllProperties((prev) =>
+          isAppend.current ? [...prev, ...filteredIncoming] : filteredIncoming,
+        );
+
+        // Update pagination to reflect filtered counts
+        const newTotal = isAppend.current
+          ? allProperties.length + filteredIncoming.length
+          : filteredIncoming.length;
+
+        setPagination({
+          ...json.pagination,
+          total: newTotal,
+          pages: Math.ceil(newTotal / limit),
+        });
       })
       .catch((err) => {
         if (cancelled) return;
+        console.error("Error fetching properties:", err);
         setError(err.message ?? "Failed to load properties.");
       })
       .finally(() => {
@@ -171,7 +182,6 @@ export function useListings({ limit = 12 } = {}) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     filters.type,
     filters.badge,
@@ -182,7 +192,7 @@ export function useListings({ limit = 12 } = {}) {
     tick,
   ]);
 
-  // ── Client-side location filter (applied after fetch) ─────────────────────
+  // ── Client-side location filter ──────────────────────────────────────────
   const properties =
     filters.location === "All Locations"
       ? allProperties
@@ -203,9 +213,9 @@ export function useListings({ limit = 12 } = {}) {
     resetFilters,
     loadMore,
     refetch,
-    totalCount: pagination?.total ?? properties.length,
+    totalCount: properties.length,
   };
 }
 
-// ─── usePropertyActions (re-exported for Listings page use) ──────────────────
+// ─── usePropertyActions ──────────────────────────────────────────────────────
 export { usePropertyActions } from "./useFeaturedProperties";

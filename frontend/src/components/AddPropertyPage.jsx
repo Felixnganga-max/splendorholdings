@@ -29,7 +29,7 @@ const PROPERTY_TYPES = [
   "Apartment",
   "Townhouse",
   "Maisonette",
-  "Land/Plot",
+  "Land",
   "Commercial",
   "Condos",
   "Project",
@@ -311,7 +311,7 @@ export default function AddPropertyPage() {
     e.target.value = "";
   };
 
-  const isLand = form.type === "Land/Plot";
+  const isLand = form.type === "Land";
   const showSale =
     form.listingIntent === "sale" || form.listingIntent === "both";
   const showRent =

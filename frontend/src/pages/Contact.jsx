@@ -54,7 +54,7 @@ const contactDetails = [
     icon: MapPin,
     label: "Visit Us",
     value: "Senteu Plaza, Kilimani, Nairobi",
-    sub: "Simba Lane, Nyali, Mombasa",
+
     accent: "#c2884a",
   },
   {

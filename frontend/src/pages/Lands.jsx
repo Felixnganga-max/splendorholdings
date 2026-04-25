@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Search,
   Heart,
@@ -9,14 +10,10 @@ import {
   ChevronDown,
   AlertCircle,
   Loader2,
-  CheckCircle2,
-  LogIn,
-  ArrowRight,
   RotateCcw,
   TreePine,
   Ruler,
 } from "lucide-react";
-import { useListings, usePropertyActions } from "../Hooks/useListings";
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const B = {
@@ -31,7 +28,6 @@ const B = {
   serif: "'Playfair Display', Georgia, serif",
   sans: "'Lato', 'Helvetica Neue', Arial, sans-serif",
   grad: "linear-gradient(135deg, #0a1172 0%, #1a3a5c 100%)",
-  // Land accent — earthy warm green to differentiate from Listings
   landAccent: "#4a7c59",
   landGrad: "linear-gradient(135deg, #2d5a3d 0%, #4a7c59 100%)",
 };
@@ -76,6 +72,33 @@ const spanPattern = [
   { col: 1, row: 1 },
 ];
 
+const API_BASE = "https://splendorholdings-2v47.vercel.app";
+
+const SORT_MAP = {
+  "Newest First": "-createdAt",
+  "Price: Low → High": "pricing.original",
+  "Price: High → Low": "-pricing.original",
+  "Area: Small → Large": "area",
+  "Area: Large → Small": "-area",
+  "Featured First": "-isFeatured -createdAt",
+};
+
+// ─── API fetch ────────────────────────────────────────────────────────────────
+async function apiFetch(path) {
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  const json = await res.json();
+  if (!res.ok)
+    throw new Error(json?.message ?? `Request failed (${res.status})`);
+  return json;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getPrimaryImage(p) {
   if (!p.images?.length) return null;
@@ -99,26 +122,6 @@ function formatLandArea(landArea) {
   return `${display} ${unit}`;
 }
 
-function normalizeLand(p) {
-  return {
-    id: p._id,
-    name: p.name,
-    location: p.location,
-    price: formatPrice(p),
-    area: p.area ?? 0,
-    landArea: formatLandArea(p.landArea),
-    landAreaRaw: p.landArea,
-    type: p.type ?? "Land/Plot",
-    badge: p.badge ?? "For Sale",
-    rating: p.rating ?? null,
-    img: getPrimaryImage(p),
-    isSoldOut: p.isSoldOut ?? false,
-    listingIntent: p.listingIntent ?? "sale",
-    rentalPricing: p.rentalPricing ?? null,
-    raw: p,
-  };
-}
-
 // ─── Skeleton Card ────────────────────────────────────────────────────────────
 function SkeletonCard({ spanCol, spanRow }) {
   return (
@@ -137,11 +140,15 @@ function SkeletonCard({ spanCol, spanRow }) {
   );
 }
 
-// ─── Land Card ─────────────────────────────────────────────────────────────────
-function LandCard({ property, spanCol, spanRow, onAction }) {
+// ─── Land Card ────────────────────────────────────────────────────────────────
+function LandCard({ property, spanCol, spanRow, onClick }) {
   const [liked, setLiked] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const p = normalizeLand(property);
+
+  const img = getPrimaryImage(property);
+  const price = formatPrice(property);
+  const landArea = formatLandArea(property.landArea);
+  const isSoldOut = property.isSoldOut ?? false;
   const isTall = spanRow === 2;
   const isWide = spanCol === 2;
 
@@ -153,18 +160,20 @@ function LandCard({ property, spanCol, spanRow, onAction }) {
         borderRadius: 20,
         overflow: "hidden",
         position: "relative",
-        cursor: "pointer",
+        cursor: isSoldOut ? "default" : "pointer",
         background: B.beige,
         minHeight: isTall ? 500 : 260,
         boxShadow: "0 4px 20px rgba(10,17,114,0.08)",
         transition:
           "transform 0.4s cubic-bezier(0.34,1.3,0.64,1), box-shadow 0.4s ease",
-        opacity: p.isSoldOut ? 0.75 : 1,
+        opacity: isSoldOut ? 0.75 : 1,
       }}
-      onClick={() => !p.isSoldOut && onAction(p)}
+      onClick={() => !isSoldOut && onClick(property._id)}
       onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-6px) scale(1.013)";
-        e.currentTarget.style.boxShadow = "0 28px 64px rgba(10,17,114,0.20)";
+        if (!isSoldOut) {
+          e.currentTarget.style.transform = "translateY(-6px) scale(1.013)";
+          e.currentTarget.style.boxShadow = "0 28px 64px rgba(10,17,114,0.20)";
+        }
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = "translateY(0) scale(1)";
@@ -172,10 +181,10 @@ function LandCard({ property, spanCol, spanRow, onAction }) {
       }}
     >
       {/* Image */}
-      {p.img ? (
+      {img ? (
         <img
-          src={p.img}
-          alt={p.location}
+          src={img}
+          alt={property.location}
           onLoad={() => setLoaded(true)}
           style={{
             position: "absolute",
@@ -221,7 +230,7 @@ function LandCard({ property, spanCol, spanRow, onAction }) {
       />
 
       {/* Sold Out overlay */}
-      {p.isSoldOut && (
+      {isSoldOut && (
         <div
           style={{
             position: "absolute",
@@ -275,7 +284,7 @@ function LandCard({ property, spanCol, spanRow, onAction }) {
             fontFamily: B.sans,
           }}
         >
-          {p.badge}
+          {property.badge ?? "Land"}
         </span>
         <span
           style={{
@@ -290,12 +299,12 @@ function LandCard({ property, spanCol, spanRow, onAction }) {
             fontFamily: B.sans,
           }}
         >
-          {p.type}
+          {property.type ?? "Land"}
         </span>
       </div>
 
       {/* Rating */}
-      {p.rating != null && (
+      {property.rating != null && property.rating > 0 && (
         <div
           style={{
             position: "absolute",
@@ -321,7 +330,7 @@ function LandCard({ property, spanCol, spanRow, onAction }) {
               fontWeight: 400,
             }}
           >
-            {p.rating}
+            {property.rating}
           </span>
         </div>
       )}
@@ -371,6 +380,21 @@ function LandCard({ property, spanCol, spanRow, onAction }) {
           zIndex: 2,
         }}
       >
+        {/* Name */}
+        <div
+          style={{
+            fontFamily: B.serif,
+            fontSize: isTall ? 18 : 15,
+            fontWeight: 600,
+            color: "#fff",
+            marginBottom: 6,
+            lineHeight: 1.2,
+            textShadow: "0 1px 8px rgba(0,0,0,0.4)",
+          }}
+        >
+          {property.name}
+        </div>
+
         {/* Location */}
         <div
           style={{
@@ -390,7 +414,7 @@ function LandCard({ property, spanCol, spanRow, onAction }) {
               letterSpacing: "0.02em",
             }}
           >
-            {p.location}
+            {property.location}
           </span>
         </div>
 
@@ -405,7 +429,7 @@ function LandCard({ property, spanCol, spanRow, onAction }) {
         >
           {/* Land specs */}
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            {p.landArea && (
+            {landArea && (
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <Ruler
                   size={12}
@@ -419,11 +443,11 @@ function LandCard({ property, spanCol, spanRow, onAction }) {
                     fontFamily: B.sans,
                   }}
                 >
-                  {p.landArea}
+                  {landArea}
                 </span>
               </div>
             )}
-            {p.area > 0 && (
+            {property.area > 0 && (
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                 <Maximize2
                   size={11}
@@ -437,28 +461,10 @@ function LandCard({ property, spanCol, spanRow, onAction }) {
                     fontFamily: B.sans,
                   }}
                 >
-                  {p.area} m²
+                  {property.area} m²
                 </span>
               </div>
             )}
-            {p.listingIntent === "rent" || p.listingIntent === "both" ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <TreePine
-                  size={11}
-                  color="rgba(212,175,55,0.9)"
-                  strokeWidth={1.8}
-                />
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: "rgba(255,235,200,0.9)",
-                    fontFamily: B.sans,
-                  }}
-                >
-                  For Lease
-                </span>
-              </div>
-            ) : null}
           </div>
 
           {/* Price pill */}
@@ -479,7 +485,7 @@ function LandCard({ property, spanCol, spanRow, onAction }) {
                 color: "#fff",
               }}
             >
-              {p.price}
+              {price}
             </span>
           </div>
         </div>
@@ -544,11 +550,10 @@ function FilterBar({ filters, setFilter, resetFilters, totalCount }) {
     />
   );
 
-  // Intent tabs
   const intentTabs = [
+    { label: "All", value: "" },
     { label: "For Sale", value: "sale" },
     { label: "For Lease", value: "rent" },
-    { label: "All", value: "" },
   ];
 
   return (
@@ -850,14 +855,159 @@ function FilterBar({ filters, setFilter, resetFilters, totalCount }) {
   );
 }
 
+// ─── useLandListings hook ─────────────────────────────────────────────────────
+function useLandListings(limit = 12) {
+  const DEFAULT_FILTERS = {
+    keyword: "",
+    location: "All Locations",
+    sort: "Newest First",
+    listingIntent: "",
+    landUnit: "",
+    minPrice: "",
+    maxPrice: "",
+  };
+
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [allProperties, setAllProperties] = useState([]);
+  const [pagination, setPagination] = useState(null);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState(null);
+  const [tick, setTick] = useState(0);
+  const isAppend = useRef(false);
+
+  const setFilter = (key, value) => {
+    setFilters((f) => ({ ...f, [key]: value }));
+    setPage(1);
+    isAppend.current = false;
+  };
+
+  const resetFilters = () => {
+    setFilters(DEFAULT_FILTERS);
+    setPage(1);
+    isAppend.current = false;
+    setTick((n) => n + 1);
+  };
+
+  const loadMore = () => {
+    if (!pagination || page >= pagination.pages) return;
+    isAppend.current = true;
+    setPage((p) => p + 1);
+  };
+
+  const refetch = () => {
+    setPage(1);
+    isAppend.current = false;
+    setTick((n) => n + 1);
+  };
+
+  // In the useLandListings hook inside Lands.jsx, update the useEffect:
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isAppend.current) setLoading(true);
+    else setLoadingMore(true);
+    setError(null);
+
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+      sort: SORT_MAP[filters.sort] ?? "-createdAt",
+    });
+
+    // 🔴 Only fetch Land type
+    params.set("type", "Land");
+
+    // Also include "land" lowercase just in case
+    // params.set("type", "Land,land");
+
+    if (filters.keyword.trim()) params.set("search", filters.keyword.trim());
+    if (filters.listingIntent)
+      params.set("listingIntent", filters.listingIntent);
+    if (filters.minPrice) params.set("minPrice", filters.minPrice);
+    if (filters.maxPrice) params.set("maxPrice", filters.maxPrice);
+
+    console.log("Fetching lands with params:", params.toString());
+
+    apiFetch(`/api/v1/properties?${params.toString()}`)
+      .then((json) => {
+        if (cancelled) return;
+        let incoming = json.data?.properties ?? [];
+
+        // 🔴 Double-check filter client-side
+        incoming = incoming.filter(
+          (prop) => prop.type === "Land" || prop.type === "land",
+        );
+
+        console.log(`Found ${incoming.length} land properties`);
+
+        setAllProperties((prev) =>
+          isAppend.current ? [...prev, ...incoming] : incoming,
+        );
+        setPagination(json.pagination ?? null);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Error fetching lands:", err);
+        setError(err.message ?? "Failed to load properties.");
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setLoading(false);
+        setLoadingMore(false);
+        isAppend.current = false;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    filters.keyword,
+    filters.sort,
+    filters.listingIntent,
+    filters.minPrice,
+    filters.maxPrice,
+    page,
+    limit,
+    tick,
+  ]);
+
+  // Client-side location filter
+  const properties =
+    filters.location === "All Locations"
+      ? allProperties
+      : allProperties.filter((p) =>
+          p.location?.toLowerCase().includes(filters.location.toLowerCase()),
+        );
+
+  // Client-side land unit filter
+  const filteredProperties = filters.landUnit
+    ? properties.filter((p) => p.landArea?.unit === filters.landUnit)
+    : properties;
+
+  return {
+    properties: filteredProperties,
+    loading,
+    loadingMore,
+    error,
+    hasMore: pagination ? page < pagination.pages : false,
+    filters,
+    setFilter,
+    resetFilters,
+    loadMore,
+    refetch,
+    totalCount: pagination?.total ?? filteredProperties.length,
+  };
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function Lands() {
+  const navigate = useNavigate();
   const [heroBg, setHeroBg] = useState(0);
   const [heroOffset, setHeroOffset] = useState(0);
-  const [activeProperty, setActiveProperty] = useState(null);
   const heroRef = useRef(null);
 
-  // Lock type to "Land/Plot" — all other filters work normally
   const {
     properties,
     loading,
@@ -870,14 +1020,9 @@ export default function Lands() {
     loadMore,
     refetch,
     totalCount,
-  } = useListings({ limit: 12, defaultFilters: { type: "Land/Plot" } });
+  } = useLandListings(12);
 
-  // Ensure type never drifts from Land/Plot
-  useEffect(() => {
-    if (filters.type !== "Land/Plot") setFilter("type", "Land/Plot");
-  }, []);
-
-  /* Hero parallax */
+  // Hero parallax
   useEffect(() => {
     const onScroll = () => {
       if (heroRef.current) {
@@ -889,7 +1034,7 @@ export default function Lands() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  /* Hero bg rotation */
+  // Hero bg rotation
   useEffect(() => {
     const t = setInterval(
       () => setHeroBg((b) => (b + 1) % heroBgs.length),
@@ -898,10 +1043,8 @@ export default function Lands() {
     return () => clearInterval(t);
   }, []);
 
-  const handleReset = () => {
-    resetFilters();
-    // Re-lock type after reset
-    setTimeout(() => setFilter("type", "Land/Plot"), 0);
+  const handleCardClick = (id) => {
+    navigate(`/lands/${id}`);
   };
 
   return (
@@ -966,7 +1109,6 @@ export default function Lands() {
           </div>
         ))}
 
-        {/* Dark green overlay — earthy feel for land */}
         <div
           style={{
             position: "absolute",
@@ -975,8 +1117,6 @@ export default function Lands() {
               "linear-gradient(110deg, rgba(45,90,61,0.78) 0%, rgba(74,124,89,0.52) 45%, rgba(45,90,61,0.20) 100%)",
           }}
         />
-
-        {/* Gold radial glow */}
         <div
           style={{
             position: "absolute",
@@ -987,7 +1127,6 @@ export default function Lands() {
           }}
         />
 
-        {/* Hero text */}
         <div
           className="lands-hero-text"
           style={{
@@ -1009,45 +1148,30 @@ export default function Lands() {
               marginBottom: 20,
             }}
           >
-            <span
-              style={{
-                fontFamily: B.sans,
-                fontSize: 11,
-                color: "rgba(212,175,55,0.7)",
-                letterSpacing: "0.2em",
-                textTransform: "uppercase",
-              }}
-            >
-              Home
-            </span>
-            <span style={{ color: "rgba(212,175,55,0.4)", fontSize: 12 }}>
-              ›
-            </span>
-            <span
-              style={{
-                fontFamily: B.sans,
-                fontSize: 11,
-                color: "rgba(212,175,55,0.7)",
-                letterSpacing: "0.2em",
-                textTransform: "uppercase",
-              }}
-            >
-              Properties
-            </span>
-            <span style={{ color: "rgba(212,175,55,0.4)", fontSize: 12 }}>
-              ›
-            </span>
-            <span
-              style={{
-                fontFamily: B.sans,
-                fontSize: 11,
-                color: B.accent,
-                letterSpacing: "0.2em",
-                textTransform: "uppercase",
-              }}
-            >
-              Land &amp; Plots
-            </span>
+            {["Home", "Properties", "Land & Plots"].map((crumb, i, arr) => (
+              <span
+                key={crumb}
+                style={{ display: "flex", alignItems: "center", gap: 8 }}
+              >
+                <span
+                  style={{
+                    fontFamily: B.sans,
+                    fontSize: 11,
+                    color:
+                      i === arr.length - 1 ? B.accent : "rgba(212,175,55,0.7)",
+                    letterSpacing: "0.2em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {crumb}
+                </span>
+                {i < arr.length - 1 && (
+                  <span style={{ color: "rgba(212,175,55,0.4)", fontSize: 12 }}>
+                    ›
+                  </span>
+                )}
+              </span>
+            ))}
           </div>
 
           {/* Eyebrow */}
@@ -1213,7 +1337,7 @@ export default function Lands() {
           <FilterBar
             filters={filters}
             setFilter={setFilter}
-            resetFilters={handleReset}
+            resetFilters={resetFilters}
             totalCount={totalCount}
           />
         </div>
@@ -1285,7 +1409,7 @@ export default function Lands() {
               Try adjusting your filters above
             </p>
             <button
-              onClick={handleReset}
+              onClick={resetFilters}
               style={{
                 padding: "10px 28px",
                 borderRadius: 99,
@@ -1328,7 +1452,7 @@ export default function Lands() {
                       property={p}
                       spanCol={span.col}
                       spanRow={span.row}
-                      onAction={setActiveProperty}
+                      onClick={handleCardClick}
                     />
                   );
                 })}
@@ -1382,14 +1506,6 @@ export default function Lands() {
           </div>
         )}
       </div>
-
-      {/* Action modal */}
-      {activeProperty && (
-        <ActionModal
-          property={activeProperty}
-          onClose={() => setActiveProperty(null)}
-        />
-      )}
     </div>
   );
 }
