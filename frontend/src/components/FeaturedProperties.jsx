@@ -1,21 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useRef, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Bed,
-  Bath,
-  Maximize2,
-  MapPin,
-  ArrowRight,
-  X,
-  Loader2,
-  AlertCircle,
-  CheckCircle2,
-  LogIn,
-} from "lucide-react";
-import {
-  useFeaturedProperties,
-  usePropertyActions,
-} from "../Hooks/useFeaturedProperties";
 import assets from "../assets/assets";
 
 /* ── Font injection ── */
@@ -28,14 +12,12 @@ if (!document.querySelector("#slendor-fonts")) {
   document.head.appendChild(l);
 }
 
-// ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const B = {
   primary: "#0a1172",
   secondary: "#1a3a5c",
   accent: "#d4af37",
   beige: "#ede8dc",
   white: "#fafaf8",
-  black: "#0d0d0d",
   text: "#1a1a2e",
   muted: "#6b7280",
   serif: "'Playfair Display', Georgia, serif",
@@ -43,809 +25,200 @@ const B = {
   grad: "linear-gradient(135deg, #0a1172 0%, #1a3a5c 100%)",
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function getPrimaryImage(property) {
-  if (!property.images?.length) return null;
-  const primary = property.images.find((img) => img.isPrimary);
-  return (primary ?? property.images[0])?.url ?? null;
-}
+const BEDROOM_CATEGORIES = [
+  { bedsValue: 0, label: "Studio", isPlus: false },
+  { bedsValue: 1, label: "1 Bedroom", isPlus: false },
+  { bedsValue: 2, label: "2 Bedrooms", isPlus: false },
+  { bedsValue: 3, label: "3 Bedrooms", isPlus: false },
+  { bedsValue: 4, label: "4+ Bedrooms", isPlus: true },
+];
 
-function normalizeProperty(p) {
-  return {
-    id: p._id,
-    name: p.name,
-    location: p.location,
-    price: p.pricing?.label ?? formatPrice(p.pricing?.original),
-    beds: p.beds ?? 0,
-    baths: p.baths ?? 0,
-    area: p.area ?? 0,
-    type: p.type ?? "",
-    img: getPrimaryImage(p),
-    isSoldOut: p.isSoldOut ?? false,
-    raw: p,
-  };
-}
+const API_BASE = "https://splendorholdings-2v47.vercel.app";
 
-function formatPrice(n) {
-  if (!n) return "—";
-  if (n >= 1_000_000) return `KES ${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `KES ${(n / 1_000).toFixed(0)}K`;
-  return `KES ${n}`;
-}
+async function fetchRandomImages(count = 5) {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/properties?limit=50&page=1`);
+    const json = await res.json();
+    const props = json.data?.properties ?? [];
 
-// ─── Parallax hook ────────────────────────────────────────────────────────────
-function useParallax(ref, speed = 0.08) {
-  const [y, setY] = useState(0);
-  useEffect(() => {
-    const onScroll = () => {
-      if (!ref.current) return;
-      const rect = ref.current.getBoundingClientRect();
-      const center = rect.top + rect.height / 2 - window.innerHeight / 2;
-      setY(center * speed);
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-  return y;
-}
-
-// ─── Skeleton card ────────────────────────────────────────────────────────────
-function SkeletonCard() {
-  return (
-    <div
-      style={{
-        background: "rgba(250,250,248,0.78)",
-        borderRadius: 8,
-        overflow: "hidden",
-        border: "1px solid rgba(212,175,55,0.20)",
-        boxShadow: "0 4px 20px rgba(10,17,114,0.10)",
-      }}
-    >
-      <div
-        style={{
-          height: 280,
-          backgroundImage:
-            "linear-gradient(90deg,#ede8dc 25%,#e0d9cc 50%,#ede8dc 75%)",
-          backgroundSize: "400% 100%",
-          animation: "shimmer 1.4s ease-in-out infinite",
-        }}
-      />
-      <div style={{ padding: "12px 14px 14px" }}>
-        {[90, 55].map((w, i) => (
-          <div
-            key={i}
-            style={{
-              height: i === 0 ? 18 : 12,
-              width: `${w}%`,
-              borderRadius: 4,
-              marginBottom: 8,
-              animation: "shimmer 1.4s ease-in-out infinite",
-              backgroundSize: "400% 100%",
-              backgroundImage:
-                "linear-gradient(90deg,#ede8dc 25%,#e0d9cc 50%,#ede8dc 75%)",
-            }}
-          />
-        ))}
-      </div>
-      <style>{`@keyframes shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}`}</style>
-    </div>
-  );
-}
-
-// ─── Small reusable modal helpers ─────────────────────────────────────────────
-function ErrorBox({ msg }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: 8,
-        alignItems: "flex-start",
-        background: "#fff0f0",
-        border: "1px solid #fca5a5",
-        borderRadius: 10,
-        padding: "10px 12px",
-        marginBottom: 14,
-      }}
-    >
-      <AlertCircle
-        size={15}
-        color="#dc2626"
-        style={{ flexShrink: 0, marginTop: 1 }}
-      />
-      <p
-        style={{
-          fontFamily: B.sans,
-          fontSize: 13,
-          color: "#dc2626",
-          lineHeight: 1.5,
-        }}
-      >
-        {msg}
-      </p>
-    </div>
-  );
-}
-
-function BackBtn({ onClick, label = "← Back" }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        marginTop: 10,
-        width: "100%",
-        background: "none",
-        border: "none",
-        fontFamily: B.sans,
-        fontSize: 13,
-        color: B.muted,
-        cursor: "pointer",
-        textDecoration: "underline",
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
-function ModalField({ label, labelStyle, children }) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <label style={labelStyle}>{label}</label>
-      {children}
-    </div>
-  );
-}
-
-// ─── Action Modal ─────────────────────────────────────────────────────────────
-function ActionModal({ property, onClose }) {
-  const isLoggedIn = !!localStorage.getItem("token");
-  const [mode, setMode] = useState("choose");
-  const [successMsg, setSuccessMsg] = useState("");
-  const [offeredPrice, setOfferedPrice] = useState("");
-  const [orderNotes, setOrderNotes] = useState("");
-  const [inquiryMsg, setInquiryMsg] = useState("");
-  const [inquiryType, setInquiryType] = useState("Information");
-  const [guestName, setGuestName] = useState("");
-  const [guestEmail, setGuestEmail] = useState("");
-  const [guestPhone, setGuestPhone] = useState("");
-
-  const {
-    placeOrder,
-    submitInquiry,
-    actionLoading,
-    actionError,
-    clearActionError,
-  } = usePropertyActions(property.id);
-
-  const handleOrder = async () => {
-    try {
-      const order = await placeOrder({
-        offeredPrice: offeredPrice ? Number(offeredPrice) : undefined,
-        notes: orderNotes,
-      });
-      setSuccessMsg(
-        `Order ${order.orderNumber ?? "#"} placed! Our team will reach out shortly.`,
-      );
-      setMode("success");
-    } catch (err) {
-      if (err.loginRequired) setMode("login");
+    const allImages = [];
+    for (const p of props) {
+      for (const img of p.images ?? []) {
+        if (img.url)
+          allImages.push({ url: img.url, name: p.name, beds: p.beds ?? 0 });
+      }
     }
-  };
 
-  const handleInquiry = async () => {
-    await submitInquiry({
-      message: inquiryMsg,
-      type: inquiryType,
-      guestName: isLoggedIn ? undefined : guestName,
-      guestEmail: isLoggedIn ? undefined : guestEmail,
-      guestPhone: isLoggedIn ? undefined : guestPhone,
-    });
-    if (!actionError) {
-      setSuccessMsg("Your inquiry has been sent! We'll be in touch soon.");
-      setMode("success");
+    // Fisher-Yates shuffle
+    for (let i = allImages.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [allImages[i], allImages[j]] = [allImages[j], allImages[i]];
     }
-  };
 
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
-
-  const inputStyle = {
-    width: "100%",
-    padding: "10px 14px",
-    borderRadius: 10,
-    border: `1.5px solid ${B.beige}`,
-    fontFamily: B.sans,
-    fontSize: 14,
-    color: B.text,
-    background: B.white,
-    outline: "none",
-    boxSizing: "border-box",
-  };
-
-  const labelStyle = {
-    display: "block",
-    fontFamily: B.sans,
-    fontSize: 11,
-    fontWeight: 700,
-    color: B.accent,
-    marginBottom: 5,
-    letterSpacing: "0.12em",
-    textTransform: "uppercase",
-  };
-
-  const btnPrimary = {
-    width: "100%",
-    padding: "13px",
-    borderRadius: 99,
-    border: "none",
-    background: B.grad,
-    color: B.white,
-    fontFamily: B.sans,
-    fontSize: 13,
-    fontWeight: 700,
-    letterSpacing: "0.08em",
-    cursor: actionLoading ? "not-allowed" : "pointer",
-    opacity: actionLoading ? 0.7 : 1,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    transition: "filter 0.2s",
-  };
-
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(10,17,114,0.50)",
-        backdropFilter: "blur(6px)",
-        WebkitBackdropFilter: "blur(6px)",
-        zIndex: 1000,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: B.white,
-          borderRadius: 24,
-          width: "100%",
-          maxWidth: 460,
-          padding: "30px 28px",
-          position: "relative",
-          maxHeight: "90vh",
-          overflowY: "auto",
-          border: "1px solid rgba(212,175,55,0.28)",
-          boxShadow: "0 24px 80px rgba(10,17,114,0.25)",
-        }}
-      >
-        <button
-          onClick={onClose}
-          style={{
-            position: "absolute",
-            top: 18,
-            right: 18,
-            width: 32,
-            height: 32,
-            borderRadius: "50%",
-            border: `1.5px solid ${B.beige}`,
-            background: B.white,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <X size={15} color={B.muted} />
-        </button>
-
-        <div style={{ marginBottom: 22 }}>
-          <p
-            style={{
-              fontFamily: B.sans,
-              fontSize: 11,
-              color: B.accent,
-              letterSpacing: "0.14em",
-              textTransform: "uppercase",
-              marginBottom: 3,
-            }}
-          >
-            {property.type} · {property.location}
-          </p>
-          <h3
-            style={{
-              fontFamily: B.serif,
-              fontSize: 22,
-              fontWeight: 700,
-              color: B.text,
-            }}
-          >
-            {property.name}
-          </h3>
-          <p
-            style={{
-              fontFamily: B.serif,
-              fontSize: 20,
-              fontWeight: 700,
-              color: B.primary,
-              marginTop: 2,
-            }}
-          >
-            {property.price}
-          </p>
-        </div>
-
-        <div style={{ height: 1, background: B.beige, marginBottom: 22 }} />
-
-        {mode === "choose" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <p
-              style={{
-                fontFamily: B.sans,
-                fontSize: 14,
-                color: B.muted,
-                marginBottom: 8,
-                lineHeight: 1.6,
-              }}
-            >
-              How would you like to proceed with this property?
-            </p>
-            <button
-              onClick={() => {
-                clearActionError();
-                setMode("order");
-              }}
-              style={btnPrimary}
-            >
-              <ArrowRight size={14} /> Express Purchase Interest
-            </button>
-            <button
-              onClick={() => {
-                clearActionError();
-                setMode("inquiry");
-              }}
-              style={{
-                ...btnPrimary,
-                background: "transparent",
-                color: B.text,
-                border: `2px solid ${B.text}`,
-              }}
-            >
-              Send an Inquiry
-            </button>
-          </div>
-        )}
-
-        {mode === "order" && (
-          <div>
-            <h4
-              style={{
-                fontFamily: B.serif,
-                fontSize: 20,
-                fontWeight: 700,
-                color: B.text,
-                marginBottom: 18,
-              }}
-            >
-              Express Purchase Interest
-            </h4>
-            <div style={{ marginBottom: 14 }}>
-              <label style={labelStyle}>Your Offer Price (optional)</label>
-              <input
-                style={inputStyle}
-                type="number"
-                placeholder={`Listed at ${property.price}`}
-                value={offeredPrice}
-                onChange={(e) => setOfferedPrice(e.target.value)}
-              />
-            </div>
-            <div style={{ marginBottom: 18 }}>
-              <label style={labelStyle}>Notes to Agent (optional)</label>
-              <textarea
-                style={{ ...inputStyle, minHeight: 90, resize: "vertical" }}
-                placeholder="Share anything relevant — viewing availability, financing status…"
-                value={orderNotes}
-                onChange={(e) => setOrderNotes(e.target.value)}
-              />
-            </div>
-            {actionError && <ErrorBox msg={actionError} />}
-            <button
-              style={btnPrimary}
-              onClick={handleOrder}
-              disabled={actionLoading}
-            >
-              {actionLoading ? (
-                <>
-                  <Loader2 size={14} className="spin" /> Placing order…
-                </>
-              ) : (
-                <>
-                  <ArrowRight size={14} /> Submit Interest
-                </>
-              )}
-            </button>
-            <BackBtn
-              onClick={() => {
-                clearActionError();
-                setMode("choose");
-              }}
-            />
-          </div>
-        )}
-
-        {mode === "inquiry" && (
-          <div>
-            <h4
-              style={{
-                fontFamily: B.serif,
-                fontSize: 20,
-                fontWeight: 700,
-                color: B.text,
-                marginBottom: 18,
-              }}
-            >
-              Send an Inquiry
-            </h4>
-            {!isLoggedIn && (
-              <>
-                <ModalField label="Your Name" labelStyle={labelStyle}>
-                  <input
-                    style={inputStyle}
-                    placeholder="Jane Doe"
-                    value={guestName}
-                    onChange={(e) => setGuestName(e.target.value)}
-                  />
-                </ModalField>
-                <ModalField label="Email *" labelStyle={labelStyle}>
-                  <input
-                    style={inputStyle}
-                    type="email"
-                    placeholder="you@example.com"
-                    value={guestEmail}
-                    onChange={(e) => setGuestEmail(e.target.value)}
-                  />
-                </ModalField>
-                <ModalField label="Phone (optional)" labelStyle={labelStyle}>
-                  <input
-                    style={inputStyle}
-                    type="tel"
-                    placeholder="+254 7XX XXX XXX"
-                    value={guestPhone}
-                    onChange={(e) => setGuestPhone(e.target.value)}
-                  />
-                </ModalField>
-              </>
-            )}
-            <div style={{ marginBottom: 14 }}>
-              <label style={labelStyle}>Inquiry Type</label>
-              <select
-                style={{ ...inputStyle, appearance: "none" }}
-                value={inquiryType}
-                onChange={(e) => setInquiryType(e.target.value)}
-              >
-                {["Information", "Viewing", "Offer", "Other"].map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div style={{ marginBottom: 18 }}>
-              <label style={labelStyle}>Message *</label>
-              <textarea
-                style={{ ...inputStyle, minHeight: 100, resize: "vertical" }}
-                placeholder="What would you like to know about this property?"
-                value={inquiryMsg}
-                onChange={(e) => setInquiryMsg(e.target.value)}
-              />
-            </div>
-            {actionError && <ErrorBox msg={actionError} />}
-            <button
-              style={btnPrimary}
-              onClick={handleInquiry}
-              disabled={
-                actionLoading ||
-                !inquiryMsg.trim() ||
-                (!isLoggedIn && !guestEmail.trim())
-              }
-            >
-              {actionLoading ? (
-                <>
-                  <Loader2 size={14} /> Sending…
-                </>
-              ) : (
-                "Send Inquiry"
-              )}
-            </button>
-            <BackBtn
-              onClick={() => {
-                clearActionError();
-                setMode("choose");
-              }}
-            />
-          </div>
-        )}
-
-        {mode === "login" && (
-          <div style={{ textAlign: "center", padding: "10px 0" }}>
-            <LogIn size={36} color={B.primary} style={{ marginBottom: 14 }} />
-            <h4
-              style={{
-                fontFamily: B.serif,
-                fontSize: 20,
-                fontWeight: 700,
-                color: B.text,
-                marginBottom: 8,
-              }}
-            >
-              Sign in to Place an Order
-            </h4>
-            <p
-              style={{
-                fontFamily: B.sans,
-                fontSize: 14,
-                color: B.muted,
-                lineHeight: 1.6,
-                marginBottom: 22,
-              }}
-            >
-              You need an account to express purchase interest. You can still
-              send an inquiry as a guest.
-            </p>
-            <button
-              style={btnPrimary}
-              onClick={() => {
-                window.location.href = "/login";
-              }}
-            >
-              <LogIn size={14} /> Sign In
-            </button>
-            <BackBtn
-              label="Continue as guest with an inquiry"
-              onClick={() => {
-                clearActionError();
-                setMode("inquiry");
-              }}
-            />
-          </div>
-        )}
-
-        {mode === "success" && (
-          <div style={{ textAlign: "center", padding: "10px 0" }}>
-            <CheckCircle2
-              size={40}
-              color={B.accent}
-              style={{ marginBottom: 14 }}
-            />
-            <h4
-              style={{
-                fontFamily: B.serif,
-                fontSize: 22,
-                fontWeight: 700,
-                color: B.text,
-                marginBottom: 8,
-              }}
-            >
-              Done!
-            </h4>
-            <p
-              style={{
-                fontFamily: B.sans,
-                fontSize: 14,
-                color: B.muted,
-                lineHeight: 1.6,
-                marginBottom: 22,
-              }}
-            >
-              {successMsg}
-            </p>
-            <button style={btnPrimary} onClick={onClose}>
-              Close
-            </button>
-          </div>
-        )}
-      </div>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} .spin{animation:spin 0.8s linear infinite;display:inline-block;}`}</style>
-    </div>
-  );
+    return allImages.slice(0, count);
+  } catch {
+    return [];
+  }
 }
 
-// ─── Property Card ─────────────────────────────────────────────────────────────
-function PropertyCard({ property }) {
+// ─── Parallax Card ────────────────────────────────────────────────────────────
+function ParallaxCard({ category, imageData }) {
   const navigate = useNavigate();
-  const [imgLoaded, setImgLoaded] = useState(false);
+  const cardRef = useRef(null);
   const imgRef = useRef(null);
-  const parallaxY = useParallax(imgRef, 0.06);
+  const rafRef = useRef(null);
+  const [loaded, setLoaded] = useState(false);
 
-  const p = normalizeProperty(property);
+  // Continuous rAF loop for butter-smooth parallax
+  useEffect(() => {
+    const img = imgRef.current;
+    const card = cardRef.current;
+    if (!img || !card) return;
 
-  const handleCardClick = () => {
-    if (p.id) navigate(`/property/${p.id}`);
+    let currentY = 0;
+
+    const tick = () => {
+      const rect = card.getBoundingClientRect();
+      const vh = window.innerHeight;
+      const cardMid = rect.top + rect.height / 2;
+      const viewMid = vh / 2;
+      // normalise: 0 when card is centred in viewport
+      const offset = (viewMid - cardMid) / (vh * 0.7);
+      const clamped = Math.max(-1, Math.min(1, offset));
+      const targetY = clamped * 18; // ±18% travel
+      currentY += (targetY - currentY) * 0.08; // lerp
+      img.style.transform = `scale(1.36) translateY(${currentY.toFixed(3)}%)`;
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  const handleClick = () => {
+    const param = category.isPlus ? "bedsMin=4" : `beds=${category.bedsValue}`;
+    navigate(`/listings?${param}`);
   };
 
   return (
     <div
-      onClick={handleCardClick}
+      ref={cardRef}
+      onClick={handleClick}
       style={{
-        borderRadius: 8,
+        position: "relative",
+        borderRadius: 6,
         overflow: "hidden",
-        boxShadow: "0 4px 20px rgba(10,17,114,0.12)",
-        transition:
-          "transform 0.30s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.30s ease",
         cursor: "pointer",
-        opacity: p.isSoldOut ? 0.72 : 1,
-        background: B.white,
+        aspectRatio: "2 / 3",
+        background: "#0d0f1a",
+        boxShadow: "0 6px 32px rgba(10,17,114,0.20)",
+        transition:
+          "box-shadow 0.35s ease, transform 0.35s cubic-bezier(0.34,1.56,0.64,1)",
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-6px) scale(1.01)";
-        e.currentTarget.style.boxShadow = "0 20px 48px rgba(10,17,114,0.20)";
+        e.currentTarget.style.boxShadow = "0 28px 72px rgba(10,17,114,0.42)";
+        e.currentTarget.style.transform = "scale(1.025)";
+        const rule = e.currentTarget.querySelector(".gold-rule");
+        const name = e.currentTarget.querySelector(".card-name");
+        if (rule) rule.style.width = "48px";
+        if (name) name.style.opacity = "1";
+        if (name) name.style.transform = "translateY(0px)";
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "translateY(0) scale(1)";
-        e.currentTarget.style.boxShadow = "0 4px 20px rgba(10,17,114,0.12)";
+        e.currentTarget.style.boxShadow = "0 6px 32px rgba(10,17,114,0.20)";
+        e.currentTarget.style.transform = "scale(1)";
+        const rule = e.currentTarget.querySelector(".gold-rule");
+        const name = e.currentTarget.querySelector(".card-name");
+        if (rule) rule.style.width = "22px";
+        if (name) name.style.opacity = "0.82";
+        if (name) name.style.transform = "translateY(5px)";
       }}
     >
-      {/* ── Image — takes up the bulk of the card ── */}
-      <div
-        ref={imgRef}
-        style={{
-          position: "relative",
-          height: 300,
-          overflow: "hidden",
-          background: B.beige,
-        }}
-      >
-        {p.img ? (
-          <img
-            src={p.img}
-            alt={p.name}
-            onLoad={() => setImgLoaded(true)}
-            style={{
-              width: "100%",
-              height: "115%",
-              objectFit: "cover",
-              objectPosition: "center",
-              transform: `translateY(${parallaxY}px)`,
-              willChange: "transform",
-              opacity: imgLoaded ? 1 : 0,
-              transition: "opacity 0.5s ease, transform 0.05s linear",
-            }}
-          />
-        ) : (
-          <div
-            style={{
-              height: "100%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: B.accent,
-              fontSize: 13,
-              fontFamily: B.sans,
-            }}
-          >
-            No image
-          </div>
-        )}
-
-        {/* Subtle bottom gradient so text below reads cleanly */}
+      {/* ── Image layer ── */}
+      {imageData?.url ? (
+        <img
+          ref={imgRef}
+          src={imageData.url}
+          alt={category.label}
+          onLoad={() => setLoaded(true)}
+          style={{
+            position: "absolute",
+            top: "-18%",
+            left: 0,
+            width: "100%",
+            height: "136%",
+            objectFit: "cover",
+            objectPosition: "center",
+            opacity: loaded ? 1 : 0,
+            transition: "opacity 0.7s ease",
+            willChange: "transform",
+            transform: "scale(1.36) translateY(0%)",
+          }}
+        />
+      ) : (
         <div
           style={{
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(180deg, transparent 55%, rgba(10,17,114,0.22) 100%)",
+              "linear-gradient(90deg,#1a1a2e 25%,#0f1560 50%,#1a1a2e 75%)",
+            backgroundSize: "400% 100%",
+            animation: "shimmer 1.6s ease-in-out infinite",
           }}
         />
+      )}
 
-        {/* Sold Out overlay */}
-        {p.isSoldOut && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background: "rgba(10,17,114,0.46)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <span
-              style={{
-                fontFamily: B.sans,
-                fontSize: 13,
-                fontWeight: 700,
-                letterSpacing: "0.15em",
-                textTransform: "uppercase",
-                color: "#fff",
-                padding: "6px 16px",
-                border: "2px solid #fff",
-                borderRadius: 4,
-              }}
-            >
-              Sold Out
-            </span>
-          </div>
-        )}
-      </div>
+      {/* Gradient overlay — top fade light, bottom strong */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "linear-gradient(180deg, rgba(5,8,40,0.08) 0%, rgba(5,8,40,0.10) 45%, rgba(5,8,40,0.78) 100%)",
+          zIndex: 1,
+          transition: "background 0.35s ease",
+        }}
+      />
 
-      {/* ── Compact info strip ── */}
-      <div style={{ padding: "12px 14px 14px" }}>
-        <h3
+      {/* ── Bottom label ── */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 2,
+          padding: "clamp(14px,2.5vw,24px) clamp(16px,2.5vw,26px)",
+        }}
+      >
+        <div
+          className="gold-rule"
+          style={{
+            width: 22,
+            height: 1.5,
+            background: B.accent,
+            borderRadius: 2,
+            marginBottom: 9,
+            transition: "width 0.30s cubic-bezier(0.34,1.56,0.64,1)",
+          }}
+        />
+        <div
+          className="card-name"
           style={{
             fontFamily: B.serif,
-            fontSize: 16,
+            fontSize: "clamp(1.1rem, 1.8vw, 1.6rem)",
             fontWeight: 700,
-            color: B.text,
-            marginBottom: 4,
-            lineHeight: 1.25,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
+            color: B.white,
+            lineHeight: 1.15,
+            opacity: 0.82,
+            transform: "translateY(5px)",
+            transition:
+              "opacity 0.30s ease, transform 0.30s cubic-bezier(0.34,1.56,0.64,1)",
+            textShadow: "0 2px 14px rgba(0,0,0,0.50)",
+            letterSpacing: "0.01em",
           }}
         >
-          {p.name}
-        </h3>
-
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 8,
-          }}
-        >
-          {/* Location + specs */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              flexWrap: "wrap",
-              minWidth: 0,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-              <MapPin size={10} color={B.accent} strokeWidth={2} />
-              <span
-                style={{
-                  fontSize: 11,
-                  color: B.muted,
-                  fontFamily: B.sans,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  maxWidth: 90,
-                }}
-              >
-                {p.location}
-              </span>
-            </div>
-          </div>
-
-          {/* Price */}
-          <div
-            style={{
-              fontFamily: B.serif,
-              fontSize: 15,
-              fontWeight: 700,
-              color: B.primary,
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-            }}
-          >
-            {p.price}
-          </div>
+          {category.label}
         </div>
       </div>
     </div>
@@ -855,10 +228,12 @@ function PropertyCard({ property }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function FeaturedProperties() {
   const navigate = useNavigate();
-  const { properties, loading, error, refetch } = useFeaturedProperties({
-    limit: 9,
-  });
   const sectionRef = useRef(null);
+  const [images, setImages] = useState([]);
+
+  useEffect(() => {
+    fetchRandomImages(5).then(setImages);
+  }, []);
 
   return (
     <section
@@ -869,21 +244,19 @@ export default function FeaturedProperties() {
         overflow: "hidden",
       }}
     >
-      {/* Parallax background */}
+      {/* ── Backgrounds ── */}
       <div
         aria-hidden="true"
         style={{
           position: "absolute",
           inset: 0,
-          backgroundImage: `url(${assets.bg || assets.background || "/path/to/default-bg.jpg"})`,
+          backgroundImage: `url(${assets.bg || assets.background || ""})`,
           backgroundSize: "cover",
           backgroundPosition: "center",
           backgroundAttachment: "fixed",
           zIndex: 0,
         }}
       />
-
-      {/* Navy glass overlay */}
       <div
         aria-hidden="true"
         style={{
@@ -895,8 +268,6 @@ export default function FeaturedProperties() {
           zIndex: 1,
         }}
       />
-
-      {/* Gold radial glow */}
       <div
         aria-hidden="true"
         style={{
@@ -917,8 +288,8 @@ export default function FeaturedProperties() {
             padding: "0 clamp(1rem, 3vw, 2.5rem)",
           }}
         >
-          {/* Header */}
-          <div style={{ textAlign: "center", marginBottom: 52 }}>
+          {/* ── Header ── */}
+          <div style={{ textAlign: "center", marginBottom: 56 }}>
             <div
               style={{
                 display: "flex",
@@ -946,7 +317,7 @@ export default function FeaturedProperties() {
                   color: B.accent,
                 }}
               >
-                Featured Properties
+                Browse by Size
               </span>
               <div
                 style={{
@@ -957,83 +328,94 @@ export default function FeaturedProperties() {
                 }}
               />
             </div>
+            <h2
+              style={{
+                fontFamily: B.serif,
+                fontSize: "clamp(2rem, 4vw, 3.2rem)",
+                fontWeight: 700,
+                color: B.white,
+                lineHeight: 1.12,
+                textShadow: "0 4px 24px rgba(10,17,114,0.35)",
+              }}
+            >
+              Find Your Perfect Home
+            </h2>
           </div>
 
+          {/* ── Grid ── */}
           <style>{`
-            .slendor-grid {
+            @keyframes shimmer {
+              0%  { background-position: 100% 0 }
+              100%{ background-position: -100% 0 }
+            }
+            .feat-grid {
               display: grid;
               grid-template-columns: repeat(3, 1fr);
-              gap: 24px;
+              gap: clamp(10px, 1.6vw, 20px);
             }
-            @media (max-width: 1024px) {
-              .slendor-grid { grid-template-columns: repeat(2, 1fr); gap: 18px; }
+            /* rows: 3 on top, then 2 centred by sitting in col 1 & 2 */
+            .feat-grid > :nth-child(4) { grid-column: 1; }
+            .feat-grid > :nth-child(5) { grid-column: 2; }
+
+            @media (max-width: 860px) {
+              .feat-grid {
+                grid-template-columns: repeat(2, 1fr);
+              }
+              .feat-grid > :nth-child(n) { grid-column: span 1; }
             }
-            @media (max-width: 600px) {
-              .slendor-grid { grid-template-columns: 1fr; gap: 14px; }
+            @media (max-width: 500px) {
+              .feat-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+              }
+              /* on mobile keep 2-col, all span 1 */
+              .feat-grid > :nth-child(n) { grid-column: span 1; }
             }
           `}</style>
 
-          {/* Error */}
-          {error && !loading && (
-            <div
+          <div className="feat-grid">
+            {BEDROOM_CATEGORIES.map((cat, i) => (
+              <ParallaxCard
+                key={cat.bedsValue}
+                category={cat}
+                imageData={images[i] ?? null}
+              />
+            ))}
+          </div>
+
+          {/* ── Footer CTA ── */}
+          <div style={{ textAlign: "center", marginTop: 52 }}>
+            <button
+              onClick={() => navigate("/listings")}
               style={{
-                textAlign: "center",
-                padding: "60px 20px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "11px 30px",
+                borderRadius: 99,
+                border: "1.5px solid rgba(212,175,55,0.45)",
+                background: "transparent",
+                color: B.accent,
                 fontFamily: B.sans,
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: "0.10em",
+                textTransform: "uppercase",
+                cursor: "pointer",
+                transition: "all 0.22s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(212,175,55,0.10)";
+                e.currentTarget.style.borderColor = B.accent;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.borderColor = "rgba(212,175,55,0.45)";
               }}
             >
-              <AlertCircle
-                size={32}
-                color="#ef4444"
-                style={{ marginBottom: 12 }}
-              />
-              <p style={{ color: "#ef4444", fontSize: 15, marginBottom: 16 }}>
-                {error}
-              </p>
-              <button
-                onClick={refetch}
-                style={{
-                  padding: "10px 28px",
-                  borderRadius: 99,
-                  border: `2px solid ${B.white}`,
-                  background: "transparent",
-                  fontFamily: B.sans,
-                  fontSize: 13,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  color: B.white,
-                }}
-              >
-                Try Again
-              </button>
-            </div>
-          )}
-
-          {/* Grid */}
-          {!error && (
-            <div className="slendor-grid">
-              {loading ? (
-                Array.from({ length: 6 }).map((_, i) => (
-                  <SkeletonCard key={i} />
-                ))
-              ) : properties.length === 0 ? (
-                <div
-                  style={{
-                    gridColumn: "1/-1",
-                    textAlign: "center",
-                    padding: "60px 20px",
-                    fontFamily: B.sans,
-                    color: "rgba(250,250,248,0.65)",
-                    fontSize: 15,
-                  }}
-                >
-                  No properties found.
-                </div>
-              ) : (
-                properties.map((p) => <PropertyCard key={p._id} property={p} />)
-              )}
-            </div>
-          )}
+              Browse All Listings →
+            </button>
+          </div>
         </div>
       </div>
     </section>

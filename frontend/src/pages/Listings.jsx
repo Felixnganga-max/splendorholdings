@@ -11,13 +11,14 @@ import {
   ChevronDown,
   AlertCircle,
   Loader2,
-  CheckCircle2,
-  LogIn,
-  ArrowRight,
   RotateCcw,
 } from "lucide-react";
-import { useListings, usePropertyActions } from "../Hooks/useListings";
-import { useNavigate } from "react-router-dom"; // Add this import
+import {
+  useListings,
+  usePropertyActions,
+  bedsLabel,
+} from "../Hooks/useListings";
+import { useNavigate, useLocation } from "react-router-dom";
 
 // ─── Brand Tokens ─────────────────────────────────────────────────────────────
 const B = {
@@ -158,7 +159,6 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
         e.currentTarget.style.boxShadow = "0 4px 20px rgba(10,17,114,0.08)";
       }}
     >
-      {/* Image */}
       {p.img ? (
         <img
           src={p.img}
@@ -192,7 +192,6 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
         </div>
       )}
 
-      {/* Gradient overlay */}
       <div
         style={{
           position: "absolute",
@@ -202,7 +201,6 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
         }}
       />
 
-      {/* Sold Out overlay */}
       {p.isSoldOut && (
         <div
           style={{
@@ -233,7 +231,6 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
         </div>
       )}
 
-      {/* Badges */}
       <div
         style={{
           position: "absolute",
@@ -276,8 +273,7 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
         </span>
       </div>
 
-      {/* Rating */}
-      {p.rating != null && (
+      {p.rating != null && p.rating > 0 && (
         <div
           style={{
             position: "absolute",
@@ -308,7 +304,6 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
         </div>
       )}
 
-      {/* Heart */}
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -342,7 +337,6 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
         />
       </button>
 
-      {/* Bottom info — no name */}
       <div
         style={{
           position: "absolute",
@@ -353,7 +347,6 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
           zIndex: 2,
         }}
       >
-        {/* Location */}
         <div
           style={{
             display: "flex",
@@ -385,7 +378,6 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
             gap: 8,
           }}
         >
-          {/* Specs */}
           <div style={{ display: "flex", gap: 12 }}>
             {p.beds > 0 && (
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -439,7 +431,6 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
             )}
           </div>
 
-          {/* Price pill */}
           <div
             style={{
               background: "rgba(212,175,55,0.18)",
@@ -462,6 +453,60 @@ function ListingCard({ property, spanCol, spanRow, onAction }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Active Beds Filter Pill ──────────────────────────────────────────────────
+function BedsFilterPill({ filters, onClear }) {
+  const hasBeds = filters.beds != null || filters.bedsMin != null;
+  if (!hasBeds) return null;
+
+  const label = bedsLabel(filters.beds, filters.bedsMin);
+
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        background: B.grad,
+        borderRadius: 99,
+        padding: "6px 14px 6px 12px",
+        marginBottom: 14,
+      }}
+    >
+      <Bed size={12} color={B.accent} strokeWidth={2} />
+      <span
+        style={{
+          fontFamily: B.sans,
+          fontSize: 12,
+          fontWeight: 700,
+          color: B.white,
+          letterSpacing: "0.04em",
+        }}
+      >
+        {label}
+      </span>
+      <button
+        onClick={onClear}
+        style={{
+          background: "rgba(255,255,255,0.18)",
+          border: "none",
+          borderRadius: "50%",
+          width: 18,
+          height: 18,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          padding: 0,
+          marginLeft: 2,
+        }}
+        title="Remove beds filter"
+      >
+        <X size={10} color={B.white} />
+      </button>
     </div>
   );
 }
@@ -563,9 +608,6 @@ function FilterBar({
                 fontWeight: 700,
                 padding: "14px 20px",
                 color: isActive ? B.primary : B.muted,
-                borderBottom: isActive
-                  ? `2px solid ${B.primary}`
-                  : "2px solid transparent",
                 background: "transparent",
                 border: "none",
                 borderBottom: isActive
@@ -823,9 +865,22 @@ function FilterBar({
 export default function Listings() {
   const [heroBg, setHeroBg] = useState(0);
   const [heroOffset, setHeroOffset] = useState(0);
-  const [activeProperty, setActiveProperty] = useState(null);
   const heroRef = useRef(null);
-  const navigate = useNavigate(); // Add this
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // useEffect(() => {
+  //   window.scrollTo({ top: -20, behavior: "instant" });
+  // }, []);
+
+  // ── Parse beds/bedsMin from URL query params on first render ────────────────
+  const urlParams = new URLSearchParams(location.search);
+  const initialBeds = urlParams.has("beds")
+    ? Number(urlParams.get("beds"))
+    : undefined;
+  const initialBedsMin = urlParams.has("bedsMin")
+    ? Number(urlParams.get("bedsMin"))
+    : undefined;
 
   const {
     properties,
@@ -837,10 +892,11 @@ export default function Listings() {
     filters,
     setFilter,
     resetFilters,
+    clearBedsFilter,
     loadMore,
     refetch,
     totalCount,
-  } = useListings({ limit: 12 });
+  } = useListings({ limit: 12, initialBeds, initialBedsMin });
 
   /* Hero parallax */
   useEffect(() => {
@@ -862,6 +918,12 @@ export default function Listings() {
     );
     return () => clearInterval(t);
   }, []);
+
+  // Active beds headline for hero
+  const hasBeds = filters.beds != null || filters.bedsMin != null;
+  const bedsHeadline = hasBeds
+    ? bedsLabel(filters.beds, filters.bedsMin)
+    : null;
 
   return (
     <div style={{ background: B.white, minHeight: "100vh" }}>
@@ -923,7 +985,6 @@ export default function Listings() {
           </div>
         ))}
 
-        {/* Navy overlay — toned down */}
         <div
           style={{
             position: "absolute",
@@ -933,7 +994,6 @@ export default function Listings() {
           }}
         />
 
-        {/* Gold radial glow */}
         <div
           style={{
             position: "absolute",
@@ -944,7 +1004,6 @@ export default function Listings() {
           }}
         />
 
-        {/* Hero text */}
         <div
           className="listings-hero-text"
           style={{
@@ -973,7 +1032,9 @@ export default function Listings() {
                 color: "rgba(212,175,55,0.7)",
                 letterSpacing: "0.2em",
                 textTransform: "uppercase",
+                cursor: "pointer",
               }}
+              onClick={() => navigate("/")}
             >
               Home
             </span>
@@ -989,7 +1050,7 @@ export default function Listings() {
                 textTransform: "uppercase",
               }}
             >
-              All Listings
+              {bedsHeadline ?? "All Listings"}
             </span>
           </div>
 
@@ -1034,7 +1095,7 @@ export default function Listings() {
               textShadow: "0 4px 32px rgba(10,17,114,0.4)",
             }}
           >
-            All Properties
+            {bedsHeadline ? `${bedsHeadline} Listings` : "All Properties"}
           </h1>
 
           <p
@@ -1048,8 +1109,9 @@ export default function Listings() {
               textShadow: "0 2px 16px rgba(10,17,114,0.3)",
             }}
           >
-            Browse our curated collection of Kenya's finest homes, villas,
-            apartments, and land
+            {bedsHeadline
+              ? `Browsing ${bedsHeadline.toLowerCase()} across Kenya's finest developments`
+              : "Browse our curated collection of Kenya's finest homes, villas, apartments, and land"}
           </p>
 
           {/* Stats */}
@@ -1062,7 +1124,7 @@ export default function Listings() {
             }}
           >
             {[
-              { num: String(totalCount), label: "Active Listings" },
+              { num: String(totalCount), label: "Matching Listings" },
               { num: "KES 5B+", label: "Properties Sold" },
               { num: "7", label: "Counties" },
             ].map((s, i) => (
@@ -1153,6 +1215,9 @@ export default function Listings() {
             background: B.white,
           }}
         >
+          {/* ── Active beds filter pill (above filter bar) ── */}
+          <BedsFilterPill filters={filters} onClear={clearBedsFilter} />
+
           <FilterBar
             filters={filters}
             setFilter={setFilter}
@@ -1220,7 +1285,9 @@ export default function Listings() {
                 marginBottom: 20,
               }}
             >
-              Try adjusting your filters above
+              {hasBeds
+                ? `No ${bedsLabel(filters.beds, filters.bedsMin).toLowerCase()} listings available right now.`
+                : "Try adjusting your filters above"}
             </p>
             <button
               onClick={resetFilters}

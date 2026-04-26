@@ -32,11 +32,18 @@ const SORT_MAP = {
 };
 
 // ─── Types to EXCLUDE from listings page ─────────────────────────────────────
-// These types have their own dedicated pages
 const EXCLUDED_TYPES = ["Land", "Project"];
 
+// ─── Beds label helper (used by Listings UI) ─────────────────────────────────
+export function bedsLabel(beds, bedsMin) {
+  if (bedsMin != null) return `${bedsMin}+ Bedrooms`;
+  if (beds === 0) return "Studio";
+  if (beds === 1) return "1 Bedroom";
+  return `${beds} Bedrooms`;
+}
+
 // ─── useListings ──────────────────────────────────────────────────────────────
-export function useListings({ limit = 12 } = {}) {
+export function useListings({ limit = 12, initialBeds, initialBedsMin } = {}) {
   // ── Filter state ───────────────────────────────────────────────────────────
   const DEFAULT_FILTERS = {
     keyword: "",
@@ -44,6 +51,10 @@ export function useListings({ limit = 12 } = {}) {
     location: "All Locations",
     badge: "Any Status",
     sort: "Newest First",
+    // beds: exact match (0 = Studio, 1, 2, 3…)  null = no filter
+    beds: initialBeds ?? null,
+    // bedsMin: "4 or more" mode — when set, beds filter is ignored
+    bedsMin: initialBedsMin ?? null,
   };
 
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
@@ -85,7 +96,14 @@ export function useListings({ limit = 12 } = {}) {
     setTick((n) => n + 1);
   }, []);
 
-  // ── Fetch type categories (excluding Land & Project) ───────────────────────
+  // Convenience: clear only the beds filter
+  const clearBedsFilter = useCallback(() => {
+    setFilters((f) => ({ ...f, beds: null, bedsMin: null }));
+    setPage(1);
+    isAppend.current = false;
+  }, []);
+
+  // ── Fetch type categories ──────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     apiFetch("/api/v1/categories?kind=type")
@@ -93,7 +111,6 @@ export function useListings({ limit = 12 } = {}) {
         if (cancelled) return;
         const labels = (json.data?.categories ?? [])
           .map((c) => c.label)
-          // 🔴 EXCLUDE Land and Project from filter dropdown
           .filter((label) => !EXCLUDED_TYPES.includes(label));
         setTypeCategories(["View All", ...labels]);
       })
@@ -105,7 +122,7 @@ export function useListings({ limit = 12 } = {}) {
     };
   }, []);
 
-  // ── Fetch properties (excluding Land & Project) ───────────────────────────
+  // ── Fetch properties ───────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
@@ -122,13 +139,20 @@ export function useListings({ limit = 12 } = {}) {
       sort: SORT_MAP[filters.sort] ?? "-createdAt",
     });
 
-    // 🔴 Only add type filter if it's not "View All" AND not an excluded type
     if (filters.type !== "View All" && !EXCLUDED_TYPES.includes(filters.type)) {
       params.set("type", filters.type);
     }
 
     if (filters.badge !== "Any Status") params.set("badge", filters.badge);
     if (filters.keyword.trim()) params.set("search", filters.keyword.trim());
+
+    // ── Beds filter ──────────────────────────────────────────────────────────
+    // bedsMin takes priority (e.g. 4+ mode)
+    if (filters.bedsMin != null) {
+      params.set("bedsMin", String(filters.bedsMin));
+    } else if (filters.beds != null) {
+      params.set("beds", String(filters.beds));
+    }
 
     console.log("Fetching listings with params:", params.toString());
 
@@ -137,29 +161,29 @@ export function useListings({ limit = 12 } = {}) {
         if (cancelled) return;
         let incoming = json.data?.properties ?? [];
 
-        // 🔴 CRITICAL: Filter out Land and Project types
-        const filteredIncoming = incoming.filter(
+        // Always filter out excluded types client-side as a safety net
+        const filtered = incoming.filter(
           (prop) => !EXCLUDED_TYPES.includes(prop.type),
         );
 
-        console.log(
-          `Total from API: ${incoming.length}, After filtering: ${filteredIncoming.length}`,
-        );
-        console.log(
-          "Filtered out types:",
-          incoming
-            .filter((p) => EXCLUDED_TYPES.includes(p.type))
-            .map((p) => p.type),
-        );
+        // If the API doesn't support beds filtering natively, do it client-side
+        const bedsFiltered = (() => {
+          if (filters.bedsMin != null) {
+            return filtered.filter((p) => (p.beds ?? 0) >= filters.bedsMin);
+          }
+          if (filters.beds != null) {
+            return filtered.filter((p) => (p.beds ?? 0) === filters.beds);
+          }
+          return filtered;
+        })();
 
         setAllProperties((prev) =>
-          isAppend.current ? [...prev, ...filteredIncoming] : filteredIncoming,
+          isAppend.current ? [...prev, ...bedsFiltered] : bedsFiltered,
         );
 
-        // Update pagination to reflect filtered counts
         const newTotal = isAppend.current
-          ? allProperties.length + filteredIncoming.length
-          : filteredIncoming.length;
+          ? allProperties.length + bedsFiltered.length
+          : bedsFiltered.length;
 
         setPagination({
           ...json.pagination,
@@ -187,12 +211,14 @@ export function useListings({ limit = 12 } = {}) {
     filters.badge,
     filters.keyword,
     filters.sort,
+    filters.beds,
+    filters.bedsMin,
     page,
     limit,
     tick,
   ]);
 
-  // ── Client-side location filter ──────────────────────────────────────────
+  // ── Client-side location filter ────────────────────────────────────────────
   const properties =
     filters.location === "All Locations"
       ? allProperties
@@ -211,6 +237,7 @@ export function useListings({ limit = 12 } = {}) {
     filters,
     setFilter,
     resetFilters,
+    clearBedsFilter,
     loadMore,
     refetch,
     totalCount: properties.length,
