@@ -10,7 +10,7 @@ const createTransporter = () => {
     return nodemailer.createTransport({
       service: "gmail",
       auth: {
-        user: process.env.EMAIL_USER, // e.g. sally@splendorholdings.com
+        user: "sally@splendorholdings.com",
         pass: process.env.EMAIL_APP_PASS, // Gmail App Password (not your main password)
       },
     });

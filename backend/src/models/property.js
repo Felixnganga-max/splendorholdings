@@ -28,9 +28,10 @@ const DEFAULT_BADGES = [
 ];
 
 const STATUS_TYPES = ["active", "draft", "archived", "sold", "rented"];
-const LISTING_MODES = ["whole", "unit"]; // entire building vs one section
-const LISTING_INTENTS = ["sale", "rent", "both"]; // what the owner is offering
+const LISTING_MODES = ["whole", "unit"];
+const LISTING_INTENTS = ["sale", "rent", "both"];
 const LAND_UNITS = ["acres", "hectares", "sqm", "sqft"];
+const PROJECT_STATUSES = ["in-progress", "complete"];
 
 // ─── Pricing sub-schema (sale) ────────────────────────────────────────────────
 const pricingSchema = new mongoose.Schema(
@@ -59,21 +60,16 @@ const pricingSchema = new mongoose.Schema(
 );
 
 // ─── Rental pricing sub-schema ────────────────────────────────────────────────
-// Used when listingIntent is "rent" or "both".
-// At least one of rentPerDay / rentPerMonth should be set.
 const rentalPricingSchema = new mongoose.Schema(
   {
     rentPerDay: { type: Number, min: 0, default: null },
     rentPerMonth: { type: Number, min: 0, default: null },
-    // e.g. "KES 45K/mo" — auto-generated if blank
     label: { type: String, trim: true, maxlength: 60 },
   },
   { _id: false },
 );
 
 // ─── Land area sub-schema ─────────────────────────────────────────────────────
-// Separate from `area` (built-up m²). Used for Land/Plot listings (and any
-// property where the land size matters independently of the built-up area).
 const landAreaSchema = new mongoose.Schema(
   {
     value: { type: Number, min: 0, required: true },
@@ -87,6 +83,28 @@ const landAreaSchema = new mongoose.Schema(
     },
   },
   { _id: false },
+);
+
+// ─── Unit variant sub-schema ──────────────────────────────────────────────────
+// Allows a listing to advertise multiple configurations, e.g.:
+//   "2 Bedroom" → KES 4.5M  |  "3 Bedroom" → KES 6.2M
+const unitVariantSchema = new mongoose.Schema(
+  {
+    label: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 80,
+    }, // e.g. "2 Bedroom Apartment"
+    beds: { type: Number, min: 0, default: null },
+    baths: { type: Number, min: 0, default: null },
+    area: { type: Number, min: 0, default: null }, // m²
+    price: { type: Number, min: 0, default: null }, // sale price for this variant
+    rentPerMonth: { type: Number, min: 0, default: null },
+    rentPerDay: { type: Number, min: 0, default: null },
+    notes: { type: String, trim: true, maxlength: 300, default: null },
+  },
+  { _id: true },
 );
 
 // ─── Image sub-schema ─────────────────────────────────────────────────────────
@@ -104,7 +122,6 @@ const imageSchema = new mongoose.Schema(
 const propertySchema = new mongoose.Schema(
   {
     // ── Identity ───────────────────────────────────────────────────────────────
-    // `name` is the primary/unit-level name, e.g. "2 Bedroom Apartment"
     name: {
       type: String,
       required: [true, "Property name is required"],
@@ -112,8 +129,6 @@ const propertySchema = new mongoose.Schema(
       maxlength: [120, "Name cannot exceed 120 characters"],
     },
 
-    // Parent complex / building name, e.g. "Sunshine Apartments"
-    // Required when listingMode === "unit"; optional otherwise.
     buildingName: {
       type: String,
       trim: true,
@@ -133,17 +148,25 @@ const propertySchema = new mongoose.Schema(
       coordinates: { type: [Number], default: [36.8219, -1.2921] },
     },
 
+    // ── Rich description ───────────────────────────────────────────────────────
+    // Stored as plain text using a lightweight markdown-like convention:
+    //   - Lines starting with "- " are bullet points
+    //   - Blank lines separate paragraphs
+    // The frontend renders this into <p> and <ul>/<li> elements.
     description: {
       type: String,
       trim: true,
-      maxlength: [2000, "Description cannot exceed 2000 characters"],
+      maxlength: [5000, "Description cannot exceed 5000 characters"],
     },
 
     features: [{ type: String, trim: true, maxlength: 80 }],
 
+    // ── Unit variants ──────────────────────────────────────────────────────────
+    // Optional array of configurations within one listing.
+    // e.g. a block of apartments with 1BR, 2BR, 3BR options.
+    unitVariants: { type: [unitVariantSchema], default: [] },
+
     // ── Listing mode & intent ──────────────────────────────────────────────────
-    // listingMode:   "whole" = entire property/building on offer
-    //                "unit"  = one section inside a larger building
     listingMode: {
       type: String,
       enum: {
@@ -153,10 +176,6 @@ const propertySchema = new mongoose.Schema(
       default: "whole",
     },
 
-    // listingIntent: what the owner is offering
-    //   "sale"  → only for-sale pricing applies
-    //   "rent"  → only rental pricing applies
-    //   "both"  → both sale and rental pricing shown
     listingIntent: {
       type: String,
       enum: {
@@ -174,20 +193,37 @@ const propertySchema = new mongoose.Schema(
     },
     badge: { type: String, trim: true, default: "New Listing" },
 
+    // ── Project-specific fields ────────────────────────────────────────────────
+    // Only enforced / displayed when type === "Project"
+    projectStatus: {
+      type: String,
+      enum: {
+        values: PROJECT_STATUSES,
+        message: `projectStatus must be one of: ${PROJECT_STATUSES.join(", ")}`,
+      },
+      default: null,
+    },
+
+    // ── Admin notes ────────────────────────────────────────────────────────────
+    // Internal-only memo visible only to admin/manager roles.
+    // Never surfaced in public API responses.
+    notes: {
+      type: String,
+      trim: true,
+      maxlength: [3000, "Notes cannot exceed 3000 characters"],
+      default: null,
+    },
+
     // ── Specs ──────────────────────────────────────────────────────────────────
     beds: { type: Number, default: 0, min: 0, max: 50 },
     baths: { type: Number, default: 0, min: 0, max: 50 },
-    area: { type: Number, min: 0 }, // built-up m²
+    area: { type: Number, min: 0 },
 
-    // Land area — separate from built-up area; populated for Land/Plot and
-    // any listing where land size is relevant
     landArea: { type: landAreaSchema, default: null },
 
     // ── Pricing ────────────────────────────────────────────────────────────────
-    // Sale pricing — required when listingIntent is "sale" or "both"
+    // For Projects, pricing is optional (price may not be set yet).
     pricing: { type: pricingSchema, default: null },
-
-    // Rental pricing — required when listingIntent is "rent" or "both"
     rentalPricing: { type: rentalPricingSchema, default: null },
 
     // ── Media ──────────────────────────────────────────────────────────────────
@@ -232,7 +268,7 @@ const propertySchema = new mongoose.Schema(
 
 // ─── Pre-save hook ────────────────────────────────────────────────────────────
 propertySchema.pre("save", function (next) {
-  // ── Sale pricing ────────────────────────────────────────────────────────────
+  // ── Sale pricing label ──────────────────────────────────────────────────────
   if (this.pricing) {
     const p = this.pricing;
 
@@ -267,6 +303,11 @@ propertySchema.pre("save", function (next) {
     return next(
       new Error("buildingName is required when listingMode is 'unit'"),
     );
+  }
+
+  // ── projectStatus required for Project type ─────────────────────────────────
+  if (this.type === "Project" && !this.projectStatus) {
+    return next(new Error("projectStatus is required when type is 'Project'"));
   }
 
   // ── Featured expiry ─────────────────────────────────────────────────────────
@@ -331,7 +372,6 @@ propertySchema.virtual("pricing.offerLabel").get(function () {
   return null;
 });
 
-// Full display name: "2 Bedroom Apartment — Sunshine Apartments, Kiamiti Road"
 propertySchema.virtual("displayName").get(function () {
   if (this.buildingName) return `${this.name} — ${this.buildingName}`;
   return this.name;
@@ -341,6 +381,7 @@ propertySchema.virtual("primaryImage").get(function () {
   const primary = this.images?.find((img) => img.isPrimary);
   return primary?.url || this.images?.[0]?.url || null;
 });
+
 propertySchema.virtual("isCurrentlyFeatured").get(function () {
   if (!this.isFeatured) return false;
   if (!this.featuredUntil) return true;
@@ -358,11 +399,13 @@ propertySchema.index({ isVisible: 1, status: 1 });
 propertySchema.index({ isFeatured: 1, featuredUntil: 1 });
 propertySchema.index({ listingIntent: 1 });
 propertySchema.index({ listingMode: 1 });
+propertySchema.index({ projectStatus: 1 });
 propertySchema.index({
   name: "text",
   location: "text",
   description: "text",
   buildingName: "text",
+  notes: "text",
 });
 
 // ─── Statics ──────────────────────────────────────────────────────────────────
@@ -372,6 +415,7 @@ propertySchema.statics.STATUSES = STATUS_TYPES;
 propertySchema.statics.LISTING_MODES = LISTING_MODES;
 propertySchema.statics.LISTING_INTENTS = LISTING_INTENTS;
 propertySchema.statics.LAND_UNITS = LAND_UNITS;
+propertySchema.statics.PROJECT_STATUSES = PROJECT_STATUSES;
 propertySchema.statics.formatKES = formatKES;
 propertySchema.statics.getEffectivePrice = getEffectivePrice;
 

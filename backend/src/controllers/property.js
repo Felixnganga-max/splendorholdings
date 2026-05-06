@@ -35,13 +35,8 @@ const getActiveCategoryLabels = async (kind) => {
 };
 
 // ─── Sale pricing builder ─────────────────────────────────────────────────────
-/**
- * Builds the sale pricing sub-document.
- * Mutually exclusive: offerPrice and discountPercent cannot both be set.
- */
 const buildPricing = (body) => {
-  const { price, offerPrice, discountPercent, offerExpiresAt, priceLabel } =
-    body;
+  const { price, offerPrice, discountPercent, offerExpiresAt, priceLabel } = body;
 
   if (!price) throw new AppError("price is required for sale listings", 400);
   if (offerPrice != null && discountPercent != null) {
@@ -52,19 +47,15 @@ const buildPricing = (body) => {
   }
 
   return {
-    original: Number(price),
-    offerPrice: offerPrice != null ? Number(offerPrice) : null,
+    original:        Number(price),
+    offerPrice:      offerPrice      != null ? Number(offerPrice)      : null,
     discountPercent: discountPercent != null ? Number(discountPercent) : null,
-    offerExpiresAt: offerExpiresAt ? new Date(offerExpiresAt) : null,
-    label: priceLabel || null,
+    offerExpiresAt:  offerExpiresAt  ? new Date(offerExpiresAt)        : null,
+    label:           priceLabel || null,
   };
 };
 
 // ─── Rental pricing builder ───────────────────────────────────────────────────
-/**
- * Builds the rentalPricing sub-document.
- * At least one of rentPerDay / rentPerMonth must be provided.
- */
 const buildRentalPricing = (body) => {
   const { rentPerDay, rentPerMonth, rentalLabel } = body;
 
@@ -76,9 +67,9 @@ const buildRentalPricing = (body) => {
   }
 
   return {
-    rentPerDay: rentPerDay != null ? Number(rentPerDay) : null,
+    rentPerDay:   rentPerDay   != null ? Number(rentPerDay)   : null,
     rentPerMonth: rentPerMonth != null ? Number(rentPerMonth) : null,
-    label: rentalLabel || null,
+    label:        rentalLabel || null,
   };
 };
 
@@ -98,6 +89,41 @@ const buildLandArea = (body) => {
   return { value: Number(landAreaValue), unit: landAreaUnit };
 };
 
+// ─── Unit variants builder ────────────────────────────────────────────────────
+// Accepts a JSON string array from multipart form data.
+// Each element: { label, beds?, baths?, area?, price?, rentPerMonth?, rentPerDay?, notes? }
+const buildUnitVariants = (raw) => {
+  if (!raw) return [];
+  try {
+    const arr = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .filter((v) => v && v.label)
+      .map((v) => ({
+        label:        String(v.label).trim().slice(0, 80),
+        beds:         v.beds         != null ? Number(v.beds)         : null,
+        baths:        v.baths        != null ? Number(v.baths)        : null,
+        area:         v.area         != null ? Number(v.area)         : null,
+        price:        v.price        != null ? Number(v.price)        : null,
+        rentPerMonth: v.rentPerMonth != null ? Number(v.rentPerMonth) : null,
+        rentPerDay:   v.rentPerDay   != null ? Number(v.rentPerDay)   : null,
+        notes:        v.notes ? String(v.notes).trim().slice(0, 300)  : null,
+      }));
+  } catch {
+    return [];
+  }
+};
+
+// ─── Strip notes from public-facing output ────────────────────────────────────
+const stripNotes = (property) => {
+  if (!property) return property;
+  const obj = typeof property.toObject === "function"
+    ? property.toObject({ virtuals: true })
+    : { ...property };
+  delete obj.notes;
+  return obj;
+};
+
 // ─── Query builder ────────────────────────────────────────────────────────────
 const buildPropertyQuery = (queryParams, isPublic = true) => {
   const {
@@ -115,25 +141,27 @@ const buildPropertyQuery = (queryParams, isPublic = true) => {
     isFeatured,
     listingIntent,
     listingMode,
+    projectStatus,
   } = queryParams;
 
   const filter = {};
 
   if (isPublic) {
     filter.isVisible = true;
-    filter.status = { $in: ["active", "sold"] };
+    filter.status    = { $in: ["active", "sold"] };
   } else {
     if (includeHidden !== "true") filter.isVisible = true;
     if (status) filter.status = status;
   }
 
-  if (type) filter.type = type;
-  if (badge) filter.badge = badge;
+  if (type)          filter.type          = type;
+  if (badge)         filter.badge         = badge;
   if (listingIntent) filter.listingIntent = listingIntent;
-  if (listingMode) filter.listingMode = listingMode;
+  if (listingMode)   filter.listingMode   = listingMode;
+  if (projectStatus) filter.projectStatus = projectStatus;
   if (isFeatured === "true") filter.isFeatured = true;
-  if (isSoldOut === "true") filter.isSoldOut = true;
-  if (isSoldOut === "false") filter.isSoldOut = false;
+  if (isSoldOut  === "true") filter.isSoldOut  = true;
+  if (isSoldOut  === "false") filter.isSoldOut = false;
 
   if (minPrice || maxPrice) {
     filter["pricing.original"] = {};
@@ -165,15 +193,21 @@ const getProperties = asyncHandler(async (req, res) => {
     Property.countDocuments(filter),
   ]);
 
+  // Strip notes from public responses
+  const safeProperties = isPublic ? properties.map(stripNotes) : properties;
+
   return paginated(
     res,
-    { properties },
+    { properties: safeProperties },
     { page, limit, total, pages: Math.ceil(total / limit) },
   );
 });
 
 // ─── GET /api/v1/properties/:id ───────────────────────────────────────────────
 const getProperty = asyncHandler(async (req, res) => {
+  const isAdminOrManager =
+    req.user && ["admin", "manager"].includes(req.user.role);
+
   const property = await Property.findByIdAndUpdate(
     req.params.id,
     { $inc: { viewCount: 1 } },
@@ -184,14 +218,14 @@ const getProperty = asyncHandler(async (req, res) => {
 
   if (!property) return notFound(res, "Property not found.");
 
-  if (
-    !property.isVisible &&
-    (!req.user || !["admin", "manager"].includes(req.user.role))
-  ) {
+  if (!property.isVisible && !isAdminOrManager) {
     return notFound(res, "Property not found.");
   }
 
-  return success(res, { property });
+  // Strip notes for public consumers
+  const safeProperty = isAdminOrManager ? property : stripNotes(property);
+
+  return success(res, { property: safeProperty });
 });
 
 // ─── POST /api/v1/properties ──────────────────────────────────────────────────
@@ -207,12 +241,17 @@ const createProperty = asyncHandler(async (req, res) => {
     badge,
     description,
     features,
+    unitVariants,
+    notes,
     isFeatured,
     featuredUntil,
     coordinates,
-    listingMode = "whole",
+    listingMode   = "whole",
     listingIntent = "sale",
+    projectStatus,
   } = req.body;
+
+  const isProject = type === "Project";
 
   // ── Validate listingMode & listingIntent ───────────────────────────────────
   if (!Property.LISTING_MODES.includes(listingMode)) {
@@ -230,10 +269,17 @@ const createProperty = asyncHandler(async (req, res) => {
 
   // buildingName required for unit mode
   if (listingMode === "unit" && !buildingName) {
-    return badRequest(
-      res,
-      "buildingName is required when listingMode is 'unit'.",
-    );
+    return badRequest(res, "buildingName is required when listingMode is 'unit'.");
+  }
+
+  // ── Project-specific validation ───────────────────────────────────────────
+  if (isProject) {
+    if (!projectStatus || !Property.PROJECT_STATUSES.includes(projectStatus)) {
+      return badRequest(
+        res,
+        `projectStatus is required for Projects. Valid values: ${Property.PROJECT_STATUSES.join(", ")}`,
+      );
+    }
   }
 
   // ── Validate type & badge ──────────────────────────────────────────────────
@@ -255,13 +301,16 @@ const createProperty = asyncHandler(async (req, res) => {
     );
   }
 
-  // ── Sale pricing ───────────────────────────────────────────────────────────
+  // ── Sale pricing (optional for Projects) ───────────────────────────────────
   let pricing = null;
   if (listingIntent === "sale" || listingIntent === "both") {
-    try {
-      pricing = buildPricing(req.body);
-    } catch (err) {
-      return badRequest(res, err.message);
+    if (!isProject || req.body.price) {
+      // Build pricing only when price is supplied or it's not a Project
+      try {
+        pricing = buildPricing(req.body);
+      } catch (err) {
+        return badRequest(res, err.message);
+      }
     }
   }
 
@@ -283,14 +332,17 @@ const createProperty = asyncHandler(async (req, res) => {
     return badRequest(res, err.message);
   }
 
+  // ── Unit variants ──────────────────────────────────────────────────────────
+  const parsedVariants = buildUnitVariants(unitVariants);
+
   // ── Upload images ──────────────────────────────────────────────────────────
   const images = req.files?.length
     ? await Promise.all(
         req.files.map(async (file, idx) => {
           const result = await uploadToCloudinary(file.buffer);
           return {
-            url: result.secure_url,
-            publicId: result.public_id,
+            url:       result.secure_url,
+            publicId:  result.public_id,
             isPrimary: idx === 0,
           };
         }),
@@ -305,23 +357,26 @@ const createProperty = asyncHandler(async (req, res) => {
     baths,
     area,
     type,
-    badge: badge || "New Listing",
+    badge:         badge || "New Listing",
     description,
     features: features
       ? Array.isArray(features)
         ? features
         : JSON.parse(features)
       : [],
+    unitVariants:  parsedVariants,
+    notes:         notes ? String(notes).trim() : null,
     pricing,
     rentalPricing,
     landArea,
     listingMode,
     listingIntent,
+    projectStatus: isProject ? projectStatus : null,
     images,
-    isFeatured: isFeatured === "true" || isFeatured === true || false,
+    isFeatured:    isFeatured === "true" || isFeatured === true || false,
     featuredUntil: featuredUntil ? new Date(featuredUntil) : null,
-    coordinates: coordinates ? JSON.parse(coordinates) : undefined,
-    listedBy: req.user._id,
+    coordinates:   coordinates  ? JSON.parse(coordinates)  : undefined,
+    listedBy:      req.user._id,
   });
 
   return created(res, { property }, "Property listed successfully.");
@@ -347,10 +402,7 @@ const updateProperty = asyncHandler(async (req, res) => {
       getActiveCategoryLabels("badge"),
     ]);
     if (req.body.type && !validTypes.includes(req.body.type)) {
-      return badRequest(
-        res,
-        `Invalid property type. Valid: ${validTypes.join(", ")}`,
-      );
+      return badRequest(res, `Invalid property type. Valid: ${validTypes.join(", ")}`);
     }
     if (req.body.badge && !validBadges.includes(req.body.badge)) {
       return badRequest(res, `Invalid badge. Valid: ${validBadges.join(", ")}`);
@@ -358,145 +410,107 @@ const updateProperty = asyncHandler(async (req, res) => {
   }
 
   // ── Validate listingMode / listingIntent changes ───────────────────────────
-  if (
-    req.body.listingMode &&
-    !Property.LISTING_MODES.includes(req.body.listingMode)
-  ) {
-    return badRequest(
-      res,
-      `listingMode must be one of: ${Property.LISTING_MODES.join(", ")}`,
-    );
+  if (req.body.listingMode && !Property.LISTING_MODES.includes(req.body.listingMode)) {
+    return badRequest(res, `listingMode must be one of: ${Property.LISTING_MODES.join(", ")}`);
   }
-  if (
-    req.body.listingIntent &&
-    !Property.LISTING_INTENTS.includes(req.body.listingIntent)
-  ) {
-    return badRequest(
-      res,
-      `listingIntent must be one of: ${Property.LISTING_INTENTS.join(", ")}`,
-    );
+  if (req.body.listingIntent && !Property.LISTING_INTENTS.includes(req.body.listingIntent)) {
+    return badRequest(res, `listingIntent must be one of: ${Property.LISTING_INTENTS.join(", ")}`);
   }
 
-  const effectiveMode = req.body.listingMode ?? property.listingMode;
-  const effectiveIntent = req.body.listingIntent ?? property.listingIntent;
+  const effectiveMode   = req.body.listingMode   ?? property.listingMode;
+  const effectiveIntent = req.body.listingIntent  ?? property.listingIntent;
+  const effectiveType   = req.body.type           ?? property.type;
+  const isProject       = effectiveType === "Project";
 
-  if (
-    effectiveMode === "unit" &&
-    !(req.body.buildingName ?? property.buildingName)
-  ) {
-    return badRequest(
-      res,
-      "buildingName is required when listingMode is 'unit'.",
-    );
+  if (effectiveMode === "unit" && !(req.body.buildingName ?? property.buildingName)) {
+    return badRequest(res, "buildingName is required when listingMode is 'unit'.");
+  }
+
+  // ── Project status validation ──────────────────────────────────────────────
+  if (req.body.projectStatus !== undefined) {
+    if (!Property.PROJECT_STATUSES.includes(req.body.projectStatus)) {
+      return badRequest(
+        res,
+        `projectStatus must be one of: ${Property.PROJECT_STATUSES.join(", ")}`,
+      );
+    }
+  }
+  // Enforce projectStatus required if switching type to Project
+  if (isProject && !req.body.projectStatus && !property.projectStatus) {
+    return badRequest(res, "projectStatus is required when type is 'Project'.");
   }
 
   // ── Scalar fields ──────────────────────────────────────────────────────────
   const scalarFields = [
-    "name",
-    "buildingName",
-    "location",
-    "beds",
-    "baths",
-    "area",
-    "type",
-    "badge",
-    "description",
-    "features",
-    "status",
-    "isFeatured",
-    "featuredUntil",
-    "listingMode",
-    "listingIntent",
+    "name", "buildingName", "location", "beds", "baths", "area",
+    "type", "badge", "description", "features", "status",
+    "isFeatured", "featuredUntil", "listingMode", "listingIntent",
+    "projectStatus",
   ];
   scalarFields.forEach((field) => {
     if (req.body[field] !== undefined) property[field] = req.body[field];
   });
 
+  // ── Notes (admin/manager only) ─────────────────────────────────────────────
+  if (req.body.notes !== undefined && isAdminOrManager) {
+    property.notes = req.body.notes ? String(req.body.notes).trim() : null;
+  }
+
+  // ── Unit variants ──────────────────────────────────────────────────────────
+  if (req.body.unitVariants !== undefined) {
+    property.unitVariants = buildUnitVariants(req.body.unitVariants);
+  }
+
   // ── Visibility toggle ──────────────────────────────────────────────────────
   if (req.body.isVisible !== undefined) {
-    property.isVisible =
-      req.body.isVisible === "true" || req.body.isVisible === true;
+    property.isVisible = req.body.isVisible === "true" || req.body.isVisible === true;
   }
 
   // ── Sold Out toggle ────────────────────────────────────────────────────────
   if (req.body.isSoldOut !== undefined) {
-    const soldOut =
-      req.body.isSoldOut === "true" || req.body.isSoldOut === true;
+    const soldOut = req.body.isSoldOut === "true" || req.body.isSoldOut === true;
     property.isSoldOut = soldOut;
     if (soldOut && !property.soldAt) property.soldAt = new Date();
     if (!soldOut) property.soldAt = null;
   }
 
   // ── Sale pricing update ────────────────────────────────────────────────────
-  const salePricingFields = [
-    "price",
-    "offerPrice",
-    "discountPercent",
-    "offerExpiresAt",
-    "priceLabel",
-  ];
+  const salePricingFields = ["price", "offerPrice", "discountPercent", "offerExpiresAt", "priceLabel"];
   const hasSaleUpdate =
-    salePricingFields.some((f) => req.body[f] !== undefined) ||
-    req.body.clearOffer;
+    salePricingFields.some((f) => req.body[f] !== undefined) || req.body.clearOffer;
 
-  if (
-    hasSaleUpdate &&
-    (effectiveIntent === "sale" || effectiveIntent === "both")
-  ) {
-    try {
-      const merged = {
-        price: req.body.price ?? property.pricing?.original,
-        offerPrice:
-          req.body.offerPrice !== undefined
-            ? req.body.offerPrice
-            : property.pricing?.offerPrice,
-        discountPercent:
-          req.body.discountPercent !== undefined
-            ? req.body.discountPercent
-            : property.pricing?.discountPercent,
-        offerExpiresAt:
-          req.body.offerExpiresAt !== undefined
-            ? req.body.offerExpiresAt
-            : property.pricing?.offerExpiresAt,
-        priceLabel:
-          req.body.priceLabel !== undefined
-            ? req.body.priceLabel
-            : property.pricing?.label,
-      };
-      if (req.body.clearOffer === "true" || req.body.clearOffer === true) {
-        merged.offerPrice = null;
-        merged.discountPercent = null;
-        merged.offerExpiresAt = null;
-        merged.priceLabel = null;
+  if (hasSaleUpdate && (effectiveIntent === "sale" || effectiveIntent === "both")) {
+    // For Projects, only build pricing if a price value is actually provided
+    if (!isProject || (req.body.price ?? property.pricing?.original)) {
+      try {
+        const merged = {
+          price:           req.body.price           ?? property.pricing?.original,
+          offerPrice:      req.body.offerPrice      !== undefined ? req.body.offerPrice      : property.pricing?.offerPrice,
+          discountPercent: req.body.discountPercent !== undefined ? req.body.discountPercent : property.pricing?.discountPercent,
+          offerExpiresAt:  req.body.offerExpiresAt  !== undefined ? req.body.offerExpiresAt  : property.pricing?.offerExpiresAt,
+          priceLabel:      req.body.priceLabel      !== undefined ? req.body.priceLabel      : property.pricing?.label,
+        };
+        if (req.body.clearOffer === "true" || req.body.clearOffer === true) {
+          merged.offerPrice = null; merged.discountPercent = null;
+          merged.offerExpiresAt = null; merged.priceLabel = null;
+        }
+        property.pricing = buildPricing(merged);
+      } catch (err) {
+        return badRequest(res, err.message);
       }
-      property.pricing = buildPricing(merged);
-    } catch (err) {
-      return badRequest(res, err.message);
     }
   }
 
   // ── Rental pricing update ──────────────────────────────────────────────────
-  const rentalFields = ["rentPerDay", "rentPerMonth", "rentalLabel"];
+  const rentalFields   = ["rentPerDay", "rentPerMonth", "rentalLabel"];
   const hasRentalUpdate = rentalFields.some((f) => req.body[f] !== undefined);
 
-  if (
-    hasRentalUpdate &&
-    (effectiveIntent === "rent" || effectiveIntent === "both")
-  ) {
+  if (hasRentalUpdate && (effectiveIntent === "rent" || effectiveIntent === "both")) {
     try {
       const merged = {
-        rentPerDay:
-          req.body.rentPerDay !== undefined
-            ? req.body.rentPerDay
-            : property.rentalPricing?.rentPerDay,
-        rentPerMonth:
-          req.body.rentPerMonth !== undefined
-            ? req.body.rentPerMonth
-            : property.rentalPricing?.rentPerMonth,
-        rentalLabel:
-          req.body.rentalLabel !== undefined
-            ? req.body.rentalLabel
-            : property.rentalPricing?.label,
+        rentPerDay:   req.body.rentPerDay   !== undefined ? req.body.rentPerDay   : property.rentalPricing?.rentPerDay,
+        rentPerMonth: req.body.rentPerMonth !== undefined ? req.body.rentPerMonth : property.rentalPricing?.rentPerMonth,
+        rentalLabel:  req.body.rentalLabel  !== undefined ? req.body.rentalLabel  : property.rentalPricing?.label,
       };
       property.rentalPricing = buildRentalPricing(merged);
     } catch (err) {
@@ -505,14 +519,11 @@ const updateProperty = asyncHandler(async (req, res) => {
   }
 
   // ── Land area update ───────────────────────────────────────────────────────
-  if (
-    req.body.landAreaValue !== undefined ||
-    req.body.landAreaUnit !== undefined
-  ) {
+  if (req.body.landAreaValue !== undefined || req.body.landAreaUnit !== undefined) {
     try {
       property.landArea = buildLandArea({
         landAreaValue: req.body.landAreaValue ?? property.landArea?.value,
-        landAreaUnit: req.body.landAreaUnit ?? property.landArea?.unit,
+        landAreaUnit:  req.body.landAreaUnit  ?? property.landArea?.unit,
       });
     } catch (err) {
       return badRequest(res, err.message);
@@ -557,11 +568,11 @@ const toggleSoldOut = asyncHandler(async (req, res) => {
   if (!property) return notFound(res, "Property not found.");
   property.isSoldOut = !property.isSoldOut;
   if (property.isSoldOut) {
-    property.soldAt = new Date();
-    property.status = "sold";
+    property.soldAt  = new Date();
+    property.status  = "sold";
   } else {
-    property.soldAt = null;
-    property.status = "active";
+    property.soldAt  = null;
+    property.status  = "active";
   }
   await property.save();
   return success(
@@ -579,22 +590,17 @@ const setOffer = asyncHandler(async (req, res) => {
   const { discountPercent, offerPrice, offerExpiresAt, clearOffer } = req.body;
 
   if (clearOffer === true || clearOffer === "true") {
-    property.pricing.offerPrice = null;
+    property.pricing.offerPrice      = null;
     property.pricing.discountPercent = null;
-    property.pricing.offerExpiresAt = null;
-    property.pricing.label = null;
+    property.pricing.offerExpiresAt  = null;
+    property.pricing.label           = null;
   } else {
     if (offerPrice != null && discountPercent != null) {
-      return badRequest(
-        res,
-        "Provide either offerPrice or discountPercent — not both.",
-      );
+      return badRequest(res, "Provide either offerPrice or discountPercent — not both.");
     }
-    if (offerPrice != null) property.pricing.offerPrice = Number(offerPrice);
-    if (discountPercent != null)
-      property.pricing.discountPercent = Number(discountPercent);
-    if (offerExpiresAt)
-      property.pricing.offerExpiresAt = new Date(offerExpiresAt);
+    if (offerPrice      != null) property.pricing.offerPrice      = Number(offerPrice);
+    if (discountPercent != null) property.pricing.discountPercent = Number(discountPercent);
+    if (offerExpiresAt)          property.pricing.offerExpiresAt  = new Date(offerExpiresAt);
     property.pricing.label = null;
   }
 
